@@ -36,6 +36,7 @@ def generate_ideas_for_product(product: dict[str, Any]) -> list[dict[str, Any]]:
     category = _first_or(product.get("categories", []), "general")
     pains = product.get("pain_points") or ["an unmet user need"]
 
+    source_product_id = product.get("id", "")
     ideas: list[dict[str, Any]] = []
     for i, template in enumerate(TEMPLATES):
         pain = pains[i % len(pains)]
@@ -47,7 +48,8 @@ def generate_ideas_for_product(product: dict[str, Any]) -> list[dict[str, Any]]:
         )
         ideas.append(
             {
-                "source_product_id": product.get("id", ""),
+                "id": f"{source_product_id}-{i}" if source_product_id else f"idea-{i}",
+                "source_product_id": source_product_id,
                 "source_product_name": name,
                 "pitch": pitch,
                 "target_audience": audience,

@@ -5,6 +5,7 @@ __pycache__/
 data/raw/*.json
 data/processed/*.json
 data/processed/*.md
+data/overrides.json
 
 # Allow the committed sample input file.
 !data/raw/sample_products.json
