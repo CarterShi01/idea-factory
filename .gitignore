@@ -8,3 +8,4 @@ data/processed/*.md
 
 # Allow the committed sample input file.
 !data/raw/sample_products.json
+data/ranks.json
