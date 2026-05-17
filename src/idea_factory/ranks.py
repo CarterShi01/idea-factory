@@ -15,29 +15,46 @@ from pathlib import Path
 
 from .generate import RANK_MAX, RANK_MIN
 
-RANKS_PATH = Path("data/ranks.json")
+DEFAULT_RANKS_PATH = Path("data/ranks.json")
+RANKS_PATH = DEFAULT_RANKS_PATH  # backward-compat alias
 
 
-def load_overrides(path: Path = RANKS_PATH) -> dict[str, int]:
+class InvalidRankError(ValueError):
+    """Raised when a supplied rank is outside the allowed range."""
+
+
+def get_overrides(path: Path = DEFAULT_RANKS_PATH) -> dict[str, int]:
     """Return the persisted overrides mapping, or ``{}`` if absent."""
     if not path.exists():
         return {}
-    raw = json.loads(path.read_text(encoding="utf-8"))
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {}
     if not isinstance(raw, dict):
         return {}
-    return {str(k): int(v) for k, v in raw.items()}
+    return {str(k): int(v) for k, v in raw.items() if isinstance(v, int) and not isinstance(v, bool)}
 
 
-def set_override(idea_id: str, rank: int, *, path: Path = RANKS_PATH) -> None:
-    """Persist a rank override for ``idea_id``.
+# backward-compat alias used by api.py pre-T04
+load_overrides = get_overrides
 
-    Raises ``ValueError`` if ``rank`` is outside ``[RANK_MIN, RANK_MAX]``.
+
+def set_override(idea_id: str, rank: int, path: Path = DEFAULT_RANKS_PATH) -> dict[str, int]:
+    """Persist a rank override for ``idea_id`` and return the full map.
+
+    Raises ``InvalidRankError`` if ``rank`` is outside ``[RANK_MIN, RANK_MAX]``.
+    Raises ``ValueError`` if ``idea_id`` is empty.
     """
+    if not isinstance(rank, int) or isinstance(rank, bool):
+        raise InvalidRankError(f"rank must be an integer, got {type(rank).__name__}")
     if not (RANK_MIN <= rank <= RANK_MAX):
-        raise ValueError(
-            f"rank must be in [{RANK_MIN}, {RANK_MAX}], got {rank!r}"
+        raise InvalidRankError(
+            f"rank must be between {RANK_MIN} and {RANK_MAX} inclusive, got {rank}"
         )
-    overrides = load_overrides(path)
+    if not idea_id:
+        raise ValueError("idea_id must be a non-empty string")
+    overrides = get_overrides(path)
     overrides[str(idea_id)] = int(rank)
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp_name = tempfile.mkstemp(prefix=".ranks-", suffix=".json", dir=str(path.parent))
@@ -52,3 +69,4 @@ def set_override(idea_id: str, rank: int, *, path: Path = RANKS_PATH) -> None:
         except OSError:
             pass
         raise
+    return overrides
