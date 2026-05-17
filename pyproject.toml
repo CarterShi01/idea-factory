@@ -1,0 +1,15 @@
+[project]
+name = "idea-factory"
+version = "0.0.1"
+description = "Collect product signals and generate startup idea candidates."
+requires-python = ">=3.10"
+dependencies = [
+  "requests>=2.31.0",
+  "python-dotenv>=1.0.0",
+]
+
+[project.scripts]
+idea-factory = "idea_factory.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
