@@ -7,6 +7,7 @@ points. No external API calls.
 
 from __future__ import annotations
 
+import hashlib
 from typing import Any
 
 TEMPLATES = [
@@ -29,12 +30,18 @@ def _rank_for_index(index: int) -> int:
     return RANK_MAX - (index % span)
 
 
+def _idea_id(source_product_id: str, source_product_name: str, template_index: int) -> str:
+    key = f"{source_product_id}|{source_product_name}|{template_index}"
+    return hashlib.sha1(key.encode("utf-8")).hexdigest()[:12]
+
+
 def generate_ideas_for_product(product: dict[str, Any]) -> list[dict[str, Any]]:
     """Produce idea candidates for a single normalized product."""
     name = product.get("name") or "an unnamed product"
     audience = _first_or(product.get("target_users", []), "early adopters")
     category = _first_or(product.get("categories", []), "general")
     pains = product.get("pain_points") or ["an unmet user need"]
+    source_product_id = product.get("id", "")
 
     ideas: list[dict[str, Any]] = []
     for i, template in enumerate(TEMPLATES):
@@ -47,7 +54,8 @@ def generate_ideas_for_product(product: dict[str, Any]) -> list[dict[str, Any]]:
         )
         ideas.append(
             {
-                "source_product_id": product.get("id", ""),
+                "id": _idea_id(source_product_id, name, i),
+                "source_product_id": source_product_id,
                 "source_product_name": name,
                 "pitch": pitch,
                 "target_audience": audience,

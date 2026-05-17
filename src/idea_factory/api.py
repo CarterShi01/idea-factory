@@ -16,15 +16,26 @@ from flask import Flask, jsonify, request
 
 from .generate import generate_ideas
 from .normalize import normalize_products
+from .ranks import DEFAULT_RANKS_PATH, get_overrides
 
 DEFAULT_PRODUCTS_PATH = Path("data/raw/sample_products.json")
 
 _SUPPORTED_SORTS = {"rank"}
 
 
-def _load_mock_ideas(products_path: Path = DEFAULT_PRODUCTS_PATH) -> list[dict[str, Any]]:
+def _load_mock_ideas(
+    products_path: Path = DEFAULT_PRODUCTS_PATH,
+    ranks_path: Path = DEFAULT_RANKS_PATH,
+) -> list[dict[str, Any]]:
     raw = json.loads(products_path.read_text(encoding="utf-8"))
-    return generate_ideas(normalize_products(raw))
+    ideas = generate_ideas(normalize_products(raw))
+    overrides = get_overrides(ranks_path)
+    if overrides:
+        for idea in ideas:
+            override = overrides.get(idea.get("id"))
+            if override is not None:
+                idea["rank"] = override
+    return ideas
 
 
 def list_ideas(
