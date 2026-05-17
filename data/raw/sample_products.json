@@ -1,0 +1,68 @@
+[
+  {
+    "id": "p001",
+    "name": "FocusForge",
+    "tagline": "AI-powered deep work timer for remote engineers",
+    "description": "FocusForge blocks distractions, schedules focus blocks, and produces a weekly report of deep work hours.",
+    "url": "https://example.com/focusforge",
+    "categories": ["Productivity", "Remote Work"],
+    "target_users": ["software engineers", "remote workers"],
+    "pain_points": ["context switching", "shallow work"],
+    "launched_at": "2026-03-12"
+  },
+  {
+    "id": "p002",
+    "name": "ChefMate",
+    "tagline": "Personalized weekly meal plans from your pantry",
+    "description": "ChefMate scans your pantry, learns your preferences, and generates a 7-day meal plan with a shopping list.",
+    "url": "https://example.com/chefmate",
+    "categories": ["Food", "Consumer", "AI"],
+    "target_users": ["busy parents", "home cooks"],
+    "pain_points": ["meal planning fatigue", "food waste"],
+    "launched_at": "2026-02-28"
+  },
+  {
+    "id": "p003",
+    "name": "PaperPilot",
+    "tagline": "Read and summarize academic papers in minutes",
+    "description": "PaperPilot summarizes PDFs, extracts citations, and builds a personal knowledge graph for researchers.",
+    "url": "https://example.com/paperpilot",
+    "categories": ["Research", "AI", "Productivity"],
+    "target_users": ["graduate students", "researchers"],
+    "pain_points": ["literature overload", "slow note-taking"],
+    "launched_at": "2026-04-02"
+  },
+  {
+    "id": "p004",
+    "name": "InvoiceOwl",
+    "tagline": "Invoicing and tax tracking for freelancers",
+    "description": "InvoiceOwl auto-generates invoices, tracks payments, and estimates quarterly taxes for solo operators.",
+    "url": "https://example.com/invoiceowl",
+    "categories": ["Finance", "SMB"],
+    "target_users": ["freelancers", "indie consultants"],
+    "pain_points": ["late payments", "tax surprises"],
+    "launched_at": "2026-01-20"
+  },
+  {
+    "id": "p005",
+    "name": "TrailMix",
+    "tagline": "Crowdsourced hiking conditions in real time",
+    "description": "TrailMix collects trail condition reports from hikers and surfaces the freshest info for nearby trails.",
+    "url": "https://example.com/trailmix",
+    "categories": ["Outdoors", "Consumer", "Community"],
+    "target_users": ["hikers", "weekend explorers"],
+    "pain_points": ["stale trail info", "unexpected closures"],
+    "launched_at": "2026-04-18"
+  },
+  {
+    "id": "p006",
+    "name": "PetPal",
+    "tagline": "Daily health tracking for cats and dogs",
+    "description": "PetPal logs feeding, activity, and vet visits, and flags unusual patterns for early intervention.",
+    "url": "https://example.com/petpal",
+    "categories": ["Pets", "Consumer", "Health"],
+    "target_users": ["pet owners"],
+    "pain_points": ["missed health warnings", "scattered vet records"],
+    "launched_at": "2026-03-30"
+  }
+]
