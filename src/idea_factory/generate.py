@@ -15,9 +15,18 @@ TEMPLATES = [
     "A community-driven take on {name} that crowdsources solutions to {pain}.",
 ]
 
+RANK_MIN = 1
+RANK_MAX = 5
+
 
 def _first_or(values: list[str], default: str) -> str:
     return values[0] if values else default
+
+
+def _rank_for_index(index: int) -> int:
+    """Deterministically assign a mock rank in [RANK_MIN, RANK_MAX] for an idea index."""
+    span = RANK_MAX - RANK_MIN + 1
+    return RANK_MAX - (index % span)
 
 
 def generate_ideas_for_product(product: dict[str, Any]) -> list[dict[str, Any]]:
@@ -44,14 +53,22 @@ def generate_ideas_for_product(product: dict[str, Any]) -> list[dict[str, Any]]:
                 "target_audience": audience,
                 "category": category,
                 "pain_point": pain,
+                "rank": RANK_MIN,
             }
         )
     return ideas
 
 
 def generate_ideas(products: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Produce idea candidates for a list of normalized products."""
+    """Produce idea candidates for a list of normalized products.
+
+    Each idea is assigned a mock ``rank`` integer in ``[RANK_MIN, RANK_MAX]``.
+    Ranks vary across ideas in a deterministic, repeating pattern so consumers
+    have a non-trivial signal to sort on.
+    """
     ideas: list[dict[str, Any]] = []
     for product in products:
         ideas.extend(generate_ideas_for_product(product))
+    for index, idea in enumerate(ideas):
+        idea["rank"] = _rank_for_index(index)
     return ideas
