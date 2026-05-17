@@ -19,16 +19,26 @@ from flask import Flask, jsonify, request
 
 from .generate import RANK_MAX, RANK_MIN, generate_ideas
 from .normalize import normalize_products
-from .ranks import RANKS_PATH, load_overrides, set_override
+from .ranks import DEFAULT_RANKS_PATH, get_overrides, set_override
 
 DEFAULT_PRODUCTS_PATH = Path("data/raw/sample_products.json")
 
 _SUPPORTED_SORTS = {"rank"}
 
 
-def _load_mock_ideas(products_path: Path = DEFAULT_PRODUCTS_PATH) -> list[dict[str, Any]]:
+def _load_mock_ideas(
+    products_path: Path = DEFAULT_PRODUCTS_PATH,
+    ranks_path: Path = DEFAULT_RANKS_PATH,
+) -> list[dict[str, Any]]:
     raw = json.loads(products_path.read_text(encoding="utf-8"))
-    return generate_ideas(normalize_products(raw))
+    ideas = generate_ideas(normalize_products(raw))
+    overrides = get_overrides(ranks_path)
+    if overrides:
+        for idea in ideas:
+            override = overrides.get(idea.get("id"))
+            if override is not None:
+                idea["rank"] = override
+    return ideas
 
 
 def _apply_overrides(
@@ -57,15 +67,13 @@ def list_ideas(
     ``sort="rank"`` returns ideas ordered by ``rank`` descending. ``ideas`` can
     be supplied to sort an arbitrary list; otherwise the mock ideas generated
     from the default sample products are used. Rank overrides are merged in
-    before sorting: any idea whose ``id`` matches a key in ``overrides`` (or
-    in the persisted ``data/ranks.json`` when ``overrides`` is omitted) has
-    its ``rank`` replaced with the override value.
+    before sorting when ``overrides`` is provided; pass an explicit empty dict
+    to suppress override loading.
     """
     if ideas is None:
         ideas = _load_mock_ideas()
-    if overrides is None:
-        overrides = load_overrides()
-    ideas = _apply_overrides(ideas, overrides)
+    if overrides is not None:
+        ideas = _apply_overrides(ideas, overrides)
     if sort is None:
         return ideas
     if sort not in _SUPPORTED_SORTS:
@@ -77,13 +85,12 @@ def list_ideas(
 
 def create_app(
     products_path: Path = DEFAULT_PRODUCTS_PATH,
-    overrides_path: Path = RANKS_PATH,
+    overrides_path: Path = DEFAULT_RANKS_PATH,
 ) -> Flask:
     app = Flask(__name__)
 
     def _current_ideas() -> list[dict[str, Any]]:
-        ideas = _load_mock_ideas(products_path)
-        return _apply_overrides(ideas, load_overrides(overrides_path))
+        return _load_mock_ideas(products_path, overrides_path)
 
     @app.get("/ideas")
     def get_ideas():
