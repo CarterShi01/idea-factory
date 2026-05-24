@@ -44,7 +44,19 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     rank_parser.add_argument("idea_id", help="The id of the idea to re-rank.")
     rank_parser.add_argument("rank", type=int, help=f"New rank in [{RANK_MIN}, {RANK_MAX}].")
+
+    subparsers.add_parser(
+        "hello",
+        help="Print a greeting to verify the package is installed.",
+        description="Print 'Hello from idea-factory!' to stdout and exit 0.",
+    )
     return parser
+
+
+def hello() -> int:
+    """Print the v0.1 greeting used to verify the package is installed."""
+    print("Hello from idea-factory!")
+    return 0
 
 
 def _run_pipeline(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
@@ -93,6 +105,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "rank":
         return _run_rank(args)
+    if args.command == "hello":
+        return hello()
     return _run_pipeline(args, parser)
 
 

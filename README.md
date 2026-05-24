@@ -40,3 +40,13 @@ The pipeline is also runnable as a module:
 ```bash
 python -m idea_factory.cli
 ```
+
+### Verify the install
+
+To confirm the package is installed and importable, run the `hello` subcommand:
+
+```bash
+python -m idea_factory hello
+```
+
+It prints `Hello from idea-factory!` and exits 0.
