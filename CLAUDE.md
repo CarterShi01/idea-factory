@@ -79,6 +79,8 @@ Do not introduce any of these as a side effect of a smaller task. If a task seem
 | `src/idea_factory/export.py` | Writes JSON / Markdown output |
 | `src/idea_factory/cli.py` / `__main__.py` | Command-line entry |
 | `src/idea_factory/api.py` | Reserved / experimental — not part of the demo pipeline |
+| `src/idea_factory/collect.py` | Opt-in external signal collection (HN / Product Hunt / RSS). Network only on explicit `collect`; NOT in the offline demo path |
+| `src/idea_factory/match.py` | Keyword matching of fresh signals against existing ideas |
 | `data/raw/` | Sample input fixtures — safe to read, only extend with synthetic data |
 | `data/processed/` | Generated output — never hand-edit; regenerate via the pipeline |
 | `tests/` | Test suite (extend here when adding logic) |

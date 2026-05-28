@@ -19,6 +19,10 @@ TEMPLATES = [
 RANK_MIN = 1
 RANK_MAX = 5
 
+# Inspiration source (灵感来源) used when a product carries no explicit source,
+# i.e. the hand-authored offline sample fixtures.
+DEFAULT_INSPIRATION_SOURCE = "sample"
+
 
 def _first_or(values: list[str], default: str) -> str:
     return values[0] if values else default
@@ -44,6 +48,7 @@ def generate_ideas_for_product(product: dict[str, Any]) -> list[dict[str, Any]]:
     pains = product.get("pain_points") or ["an unmet user need"]
 
     source_product_id = product.get("id", "")
+    inspiration_source = product.get("source") or DEFAULT_INSPIRATION_SOURCE
     ideas: list[dict[str, Any]] = []
     for i, template in enumerate(TEMPLATES):
         pain = pains[i % len(pains)]
@@ -58,6 +63,7 @@ def generate_ideas_for_product(product: dict[str, Any]) -> list[dict[str, Any]]:
                 "id": _idea_id(source_product_id, i),
                 "source_product_id": source_product_id,
                 "source_product_name": name,
+                "inspiration_source": inspiration_source,
                 "pitch": pitch,
                 "target_audience": audience,
                 "category": category,

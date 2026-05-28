@@ -28,6 +28,9 @@ def export_markdown(ideas: list[dict[str, Any]], path: Path) -> Path:
             lines.append(f"- **Target audience:** {idea.get('target_audience', '')}")
             lines.append(f"- **Category:** {idea.get('category', '')}")
             lines.append(f"- **Pain point:** {idea.get('pain_point', '')}")
+            inspiration = idea.get("inspiration_source", "")
+            if inspiration:
+                lines.append(f"- **Inspiration source:** {inspiration}")
             source_id = idea.get("source_product_id", "")
             if source_id:
                 lines.append(f"- **Source product id:** `{source_id}`")

@@ -27,7 +27,12 @@ def _clean_list(value: Any) -> list[str]:
 
 
 def normalize_product(raw: dict[str, Any]) -> dict[str, Any]:
-    """Return a normalized copy of a single raw product record."""
+    """Return a normalized copy of a single raw product record.
+
+    The ``source`` field records where the record came from (its 灵感来源 /
+    inspiration source). It is empty for hand-authored sample fixtures and set
+    by the external collectors in :mod:`idea_factory.collect`.
+    """
     return {
         "id": _clean_str(raw.get("id")),
         "name": _clean_str(raw.get("name")),
@@ -38,6 +43,7 @@ def normalize_product(raw: dict[str, Any]) -> dict[str, Any]:
         "target_users": _clean_list(raw.get("target_users")),
         "pain_points": _clean_list(raw.get("pain_points")),
         "launched_at": _clean_str(raw.get("launched_at")),
+        "source": _clean_str(raw.get("source")),
     }
 
 

@@ -52,3 +52,14 @@ def test_generate_ideas_preserves_id_field():
     ideas = generate_ideas([_product("alpha"), _product("beta")])
     for idea in ideas:
         assert HEX8.match(idea["id"])
+
+
+def test_inspiration_source_defaults_to_sample():
+    ideas = generate_ideas_for_product(_product())
+    assert all(idea["inspiration_source"] == "sample" for idea in ideas)
+
+
+def test_inspiration_source_threaded_from_product_source():
+    product = {**_product(), "source": "hackernews"}
+    ideas = generate_ideas_for_product(product)
+    assert all(idea["inspiration_source"] == "hackernews" for idea in ideas)
