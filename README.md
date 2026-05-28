@@ -49,4 +49,4 @@ To confirm the package is installed and importable, run the `hello` subcommand:
 python -m idea_factory hello
 ```
 
-It prints `Hello from idea-factory!` and exits 0.
+It prints `Hello from idea-factory!` and exits 0. cooool.
