@@ -33,7 +33,8 @@ class PersonaAdapter:
         from ..persona.synthesize import synthesize_pains
 
         n = int(ctx.config.get("segments_per_round", 4))
-        segments = select_segments(load_taxonomy(), history=None, n=n)
+        derived_path = ctx.raw_dir.parent / "state" / "derived_segments.json"
+        segments = select_segments(load_taxonomy(derived_path=derived_path), history=None, n=n)
         return synthesize_pains(segments, ctx.peer_records, ctx.llm, load_step_config("persona_sim"))
 
     def _static(self, ctx: CollectContext) -> list[dict]:

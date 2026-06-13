@@ -39,10 +39,17 @@ class Segment:
         return not self.children
 
 
-def load_taxonomy(path: str | Path | None = None) -> list[Segment]:
+def load_taxonomy(path: str | Path | None = None, derived_path: str | Path | None = None) -> list[Segment]:
+    """加载种子人群;若给定 ``derived_path`` 且存在,合并自动派生的人群(去重 by id)。"""
     p = Path(path) if path else _DEFAULT_TAXONOMY
     data = json.loads(p.read_text(encoding="utf-8"))
-    return [Segment(**{k: v for k, v in s.items() if k in Segment.__annotations__}) for s in data.get("segments", [])]
+    base = [Segment(**{k: v for k, v in s.items() if k in Segment.__annotations__}) for s in data.get("segments", [])]
+    if derived_path and Path(derived_path).exists():
+        from .derive import load_derived
+
+        seen = {s.id for s in base}
+        base += [s for s in load_derived(derived_path) if s.id not in seen]
+    return base
 
 
 def flatten_leaves(segments: list[Segment]) -> list[Segment]:

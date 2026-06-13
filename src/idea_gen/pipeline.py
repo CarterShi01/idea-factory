@@ -104,6 +104,14 @@ def run_pipeline(
     else:
         backend = llm or _llm_backend(gen_backend, "generate", today, job_dir)
         candidates = generate.generate_llm(kept, backend, load_step_config("generate"))
+
+    # 动态模式:从候选的 target_user 自动派生新人群,持久化供下轮"全选"纳入
+    if use_state:
+        from .persona import load_taxonomy
+        from .persona.derive import update_derived
+
+        update_derived(candidates, load_taxonomy(), data_dir / "state" / "derived_segments.json")
+
     scored = ranks.score(candidates, today=today, weights=weights)
     ranked = ranks.rank(scored)
 

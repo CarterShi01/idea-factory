@@ -4,7 +4,8 @@
   "persona": { "enabled": true },
 
   "hn_algolia": {
-    "enabled": false,
+    "enabled": true,
+    "_note": "enabled 仅表示'live 时启用';默认 live=False 不触网,离线 demo 不受影响",
     "queries": ["ai agent", "rag", "local-first", "indie saas"],
     "window_days": 7,
     "hits_per_query": 40
