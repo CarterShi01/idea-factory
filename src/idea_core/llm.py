@@ -273,3 +273,13 @@ def build_request(item_id: str, user: str, config: dict) -> LLMRequest:
         temperature=config.get("temperature", 0.2),
         model=config.get("model"),
     )
+
+
+class _SafeDict(dict):
+    def __missing__(self, key: str) -> str:  # tolerate missing placeholders
+        return ""
+
+
+def render_template(template: str, fields: dict) -> str:
+    """Render a ``str.format``-style template, leaving missing keys blank."""
+    return template.format_map(_SafeDict(fields))

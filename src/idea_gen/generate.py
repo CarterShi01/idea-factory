@@ -1,19 +1,23 @@
 """Stage 4 -- generate idea candidates from signals (deliberately over-generate).
 
-The MVP backend is **rule-based and offline**: it expands each signal into a few
-solution-shaped variants using templates. This is intentionally dumb -- per the
-research, generation should be high-volume and cheap; the quality gate lives
-downstream in ``idea-evl``, not here.
+Two backends, same output type:
 
-The single public entry point :func:`generate` takes a ``backend`` callable so a
-future LLM backend (Verbalized Sampling, etc.) can slot in without touching the
-pipeline. The default backend keeps the offline contract.
+* :func:`generate` -- the offline **rule-based** default. Expands each signal into
+  a few solution-shaped variants. Dumb on purpose: generation should be cheap and
+  high-volume; the quality gate is downstream in ``idea_eval``.
+* :func:`generate_llm` -- the **LLM (A) backend**. Renders one batched request per
+  signal from ``config/llm/generate.json`` and runs it through any
+  :class:`idea_core.llm.LLMBackend` (Tencent router / CC-handoff / mock). The
+  batch-first contract means one ``complete()`` call covers all signals.
+
+Both keep the same contract so the pipeline can switch between them with a flag.
 """
 
 from __future__ import annotations
 
 from typing import Callable
 
+from idea_core.llm import LLMBackend, build_request, render_template
 from idea_core.models import IdeaCandidate, Signal
 
 # Each template turns a pain into a differently-angled solution. Keeping a small
@@ -69,4 +73,64 @@ def generate(signals: list[Signal], backend: Backend = _rule_based_backend) -> l
     candidates: list[IdeaCandidate] = []
     for signal in signals:
         candidates.extend(backend(signal))
+    return candidates
+
+
+# --- A: LLM generation backend -------------------------------------------
+
+
+def _signal_fields(signal: Signal) -> dict:
+    return {
+        "title": signal.title,
+        "pain_statement": signal.pain_statement,
+        "category": signal.category or "",
+        "source": signal.source,
+        "observed_on": signal.observed_on,
+    }
+
+
+def _candidates_from_response(signal: Signal, data: dict | None) -> list[IdeaCandidate]:
+    if not data:
+        return []
+    out: list[IdeaCandidate] = []
+    for idx, item in enumerate(data.get("candidates", [])):
+        title = (item.get("title") or "").strip()
+        if not title:
+            continue
+        out.append(
+            IdeaCandidate(
+                id=f"{signal.id}-{idx}",
+                signal_id=signal.id,
+                source=signal.source,
+                title=title[:120],
+                pain=item.get("pain") or signal.pain_statement,
+                solution=item.get("solution", ""),
+                target_user=item.get("target_user", _DEFAULT_USER),
+                observed_on=signal.observed_on,
+                confidence=signal.confidence,
+                category=signal.category,
+            )
+        )
+    return out
+
+
+def generate_llm(signals: list[Signal], llm: LLMBackend, config: dict) -> list[IdeaCandidate]:
+    """LLM (A) backend: one batched request per signal, a single complete() call.
+
+    May raise ``idea_core.llm.PendingHandoff`` when the backend is CC-handoff and
+    the response pack isn't ready yet -- callers should let it propagate to the CLI.
+    """
+    template = config.get("user_template", "")
+    requests = [
+        build_request(s.id, render_template(template, _signal_fields(s)), config)
+        for s in signals
+    ]
+    responses = llm.complete(requests)
+    by_id = {r.id: r for r in responses}
+
+    candidates: list[IdeaCandidate] = []
+    for s in signals:
+        r = by_id.get(s.id)
+        if r and r.ok:
+            candidates.extend(_candidates_from_response(s, r.data))
     return candidates

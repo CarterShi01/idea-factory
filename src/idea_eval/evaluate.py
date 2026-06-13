@@ -21,6 +21,8 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 
+import json
+
 from idea_core.factors import FACTORS
 
 PURSUE = "pursue"
@@ -77,6 +79,8 @@ class Evaluation:
     risk_flags: list[str] = field(default_factory=list)
     confidence: str = "real"
     factors: dict[str, float] = field(default_factory=dict)
+    killer_objection: str = ""  # filled by the LLM judge (B)
+    judged_by: str = "rule"     # "rule" or "llm"
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -140,8 +144,66 @@ def evaluate_idea(idea: dict, floor: float = DEFAULT_FLOOR) -> Evaluation:
 _VERDICT_ORDER = {PURSUE: 0, REVIEW: 1, KILL: 2}
 
 
-def evaluate_all(ideas: list[dict], floor: float = DEFAULT_FLOOR) -> list[Evaluation]:
-    evaluations = [evaluate_idea(i, floor=floor) for i in ideas]
-    # Sort: pursue first, then review, then kill; within a band by score desc.
+def _sort(evaluations: list[Evaluation]) -> list[Evaluation]:
+    # pursue first, then review, then kill; within a band by score desc.
     evaluations.sort(key=lambda e: (_VERDICT_ORDER[e.verdict], -e.eval_score, e.idea_id))
     return evaluations
+
+
+def evaluate_all(ideas: list[dict], floor: float = DEFAULT_FLOOR) -> list[Evaluation]:
+    return _sort([evaluate_idea(i, floor=floor) for i in ideas])
+
+
+# --- B: LLM-as-judge -----------------------------------------------------
+
+
+def judge_survivors(
+    evaluations: list[Evaluation],
+    ideas_by_id: dict[str, dict],
+    llm,
+    config: dict,
+) -> list[Evaluation]:
+    """Run the LLM judge (B) over the rule-gate survivors only (Top-K, token-thrifty).
+
+    The cheap rule kill-gate has already removed the obvious losers; the LLM only
+    sees pursue/review candidates, where adversarial judgment actually pays off.
+    It may downgrade a survivor to ``kill``. Mutates and re-sorts ``evaluations``.
+
+    May raise ``idea_core.llm.PendingHandoff`` (CC-handoff mode); let it propagate.
+    """
+    from idea_core.llm import build_request, render_template
+
+    survivors = [e for e in evaluations if e.verdict in (PURSUE, REVIEW)]
+    if not survivors:
+        return evaluations
+
+    template = config.get("user_template", "")
+    requests = []
+    for e in survivors:
+        idea = ideas_by_id.get(e.idea_id, {})
+        fields = {
+            "title": e.title,
+            "pain": idea.get("pain", ""),
+            "solution": idea.get("solution", ""),
+            "target_user": idea.get("target_user", ""),
+            "factors": json.dumps(e.factors, ensure_ascii=False),
+            "confidence": e.confidence,
+        }
+        requests.append(build_request(e.idea_id, render_template(template, fields), config))
+
+    responses = {r.id: r for r in llm.complete(requests)}
+    for e in survivors:
+        r = responses.get(e.idea_id)
+        if not (r and r.ok and r.data):
+            continue
+        d = r.data
+        e.judged_by = "llm"
+        if d.get("verdict") in (PURSUE, REVIEW, KILL):
+            e.verdict = d["verdict"]
+        if isinstance(d.get("score"), (int, float)):
+            e.eval_score = round(float(d["score"]), 1)
+        e.killer_objection = d.get("killer_objection", "") or e.killer_objection
+        e.riskiest_assumption = d.get("riskiest_assumption", "") or e.riskiest_assumption
+        e.cheap_experiment = d.get("cheap_experiment", "") or e.cheap_experiment
+
+    return _sort(evaluations)

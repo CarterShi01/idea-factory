@@ -5,6 +5,8 @@ from __future__ import annotations
 import argparse
 from datetime import date
 
+from idea_core.llm import PendingHandoff
+
 from .evaluate import DEFAULT_FLOOR
 from .pipeline import run_evaluation
 
@@ -25,20 +27,42 @@ def build_parser() -> argparse.ArgumentParser:
         "--floor", type=float, default=DEFAULT_FLOOR, help="kill-gate floor for critical dimensions"
     )
     parser.add_argument("--date", default=None, help="reference date (ISO); default: today")
+    parser.add_argument(
+        "--judge-backend",
+        choices=["none", "router", "cc", "mock"],
+        default="none",
+        help="LLM-as-judge over kill-gate survivors: none (rule-only, default) / router (Tencent) / cc / mock",
+    )
     return parser
+
+
+def _report_handoff(ph: PendingHandoff) -> int:
+    response_path = ph.request_path.parent / ph.request_path.name.replace(
+        ".request.jsonl", ".response.jsonl"
+    )
+    print("\n⏸  Judge step paused for a manual Claude Code session (Max pool — no programmatic CC).")
+    print(f"   request pack: {ph.request_path}  ({ph.count} survivors)")
+    print("   1) open Claude Code by hand in this repo")
+    print(f"   2) judge the whole batch, writing responses to {response_path}")
+    print("   3) re-run this command to resume.")
+    return 2
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     today = date.fromisoformat(args.date) if args.date else date.today()
 
-    result = run_evaluation(
-        input_path=args.input,
-        output_dir=args.output_dir,
-        today=today,
-        floor=args.floor,
-        top_n=args.top_n,
-    )
+    try:
+        result = run_evaluation(
+            input_path=args.input,
+            output_dir=args.output_dir,
+            today=today,
+            floor=args.floor,
+            top_n=args.top_n,
+            judge_backend=args.judge_backend,
+        )
+    except PendingHandoff as ph:
+        return _report_handoff(ph)
 
     print(
         f"evaluated {result.evaluated} → {result.pursue} pursue · "

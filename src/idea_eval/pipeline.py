@@ -13,8 +13,17 @@ from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 
+from idea_core.llm import LLMBackend, get_backend, load_step_config
+
 from . import evaluate, export
 from .evaluate import KILL, PURSUE, REVIEW
+
+
+def _llm_backend(name: str, today: date, job_dir: str | Path) -> LLMBackend:
+    """Build an LLM backend; CC-handoff gets a dated job name for its file pack."""
+    if name == "cc":
+        return get_backend("cc", job_dir=job_dir, job_name=f"judge-{today.isoformat()}")
+    return get_backend(name)
 
 
 @dataclass
@@ -34,13 +43,30 @@ def run_evaluation(
     today: date | None = None,
     floor: float = evaluate.DEFAULT_FLOOR,
     top_n: int = 20,
+    judge_backend: str = "none",
+    llm: LLMBackend | None = None,
+    job_dir: str | Path = "data/llm_jobs",
 ) -> EvalResult:
+    """Screen idea_gen's candidates.
+
+    ``judge_backend``: ``"none"`` (rule-only, offline default, zero token) or an
+    LLM backend name (``"router"`` / ``"cc"`` / ``"mock"``). When set, the rule
+    kill-gate runs first and the LLM judge (B) only sees the survivors (Top-K),
+    using ``config/llm/judge.json``.
+    """
     input_path = Path(input_path)
     output_dir = Path(output_dir)
     today = today or date.today()
 
     ideas = json.loads(input_path.read_text(encoding="utf-8"))
     evaluations = evaluate.evaluate_all(ideas, floor=floor)
+
+    if judge_backend != "none":
+        backend = llm or _llm_backend(judge_backend, today, job_dir)
+        ideas_by_id = {i.get("id", ""): i for i in ideas}
+        evaluations = evaluate.judge_survivors(
+            evaluations, ideas_by_id, backend, load_step_config("judge")
+        )
 
     json_path = output_dir / "screened.json"
     memos_path = output_dir / "decision_memos.md"

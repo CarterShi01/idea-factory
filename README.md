@@ -63,6 +63,41 @@ python -m idea_gen      # module form
 python -m idea_eval
 ```
 
+## LLM steps (A: generate · B: judge)
+
+Two steps can use an LLM, both off by default (the offline rule-based path needs
+no network and no tokens). Switch them on per backend:
+
+```bash
+# A: LLM generation backend (idea-gen)
+idea-gen  --gen-backend router      # Tencent LKEAP (automatable; NOT Claude Code)
+
+# B: LLM-as-judge over the kill-gate survivors only (idea-eval, token-thrifty)
+idea-eval --judge-backend router
+```
+
+Backends: `rule`/`none` (offline default) · `router` (Tencent) · `mock` (tests) ·
+`cc` (manual Claude Code handoff). Prompts + JSON schemas live in
+`config/llm/{generate,judge}.json`. Set the endpoint via env
+(`IDEA_LLM_BASE_URL` / `IDEA_LLM_API_KEY` / `IDEA_LLM_MODEL`).
+
+### CC handoff mode (`--*-backend cc`) — no programmatic Claude Code
+
+Per the hard constraint (only manual CC sessions count toward the Max pool), the
+`cc` backend **never invokes Claude Code**. It writes a self-contained request
+pack and stops:
+
+```bash
+idea-eval --judge-backend cc
+#  ⏸ writes data/llm_jobs/judge-<date>.request.jsonl and pauses
+#  → open Claude Code by hand, judge the whole batch in ONE session,
+#    write data/llm_jobs/judge-<date>.response.jsonl
+idea-eval --judge-backend cc        # re-run: resumes from the response pack
+```
+
+One file = the whole batch = one manual touchpoint. See
+[`docs/design/llm-abstraction.md`](docs/design/llm-abstraction.md).
+
 ## The three sources (`data/raw/`)
 
 | Source | File | Confidence |

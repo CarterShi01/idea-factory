@@ -42,10 +42,15 @@ def write_memos(
     ]
     for rank, e in enumerate(survivors, start=1):
         synthetic = " ⚠️ synthetic" if e.confidence == "synthetic" else ""
+        judged = " · judged by LLM" if e.judged_by == "llm" else ""
         lines += [
             f"## {rank}. {e.title}",
             "",
-            f"- **Verdict**: {e.verdict.upper()} · score {e.eval_score:.0f}/100{synthetic}",
+            f"- **Verdict**: {e.verdict.upper()} · score {e.eval_score:.0f}/100{synthetic}{judged}",
+        ]
+        if e.killer_objection:
+            lines.append(f"- **Killer objection**: {e.killer_objection}")
+        lines += [
             f"- **Riskiest assumption**: {e.riskiest_assumption}",
             f"- **Cheap test (RAT)**: {e.cheap_experiment}",
         ]
