@@ -1,11 +1,10 @@
 import type { Verdict } from "../types";
-
-const LABEL: Record<Verdict, string> = { pursue: "pursue", review: "review", kill: "kill" };
+import { VERDICT_LABEL } from "../labels";
 
 export function VerdictChip({ verdict }: { verdict: Verdict }) {
-  return <span className={`chip ${verdict}`}>{LABEL[verdict] ?? verdict}</span>;
+  return <span className={`chip ${verdict}`}>{VERDICT_LABEL[verdict] ?? verdict}</span>;
 }
 
 export function SyntheticChip() {
-  return <span className="chip syn">synthetic</span>;
+  return <span className="chip syn">模拟</span>;
 }

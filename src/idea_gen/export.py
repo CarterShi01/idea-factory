@@ -22,7 +22,9 @@ def write_json(scored: list[ScoredCandidate], path: Path) -> None:
 
 
 def _factor_line(factors: dict[str, float]) -> str:
-    return " · ".join(f"{name} {value:.2f}" for name, value in factors.items())
+    from idea_core.factors import label
+
+    return " · ".join(f"{label(name)} {value:.2f}" for name, value in factors.items())
 
 
 def write_markdown(
@@ -33,26 +35,24 @@ def write_markdown(
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     lines: list[str] = [
-        f"# Idea Factory — Daily Candidates ({today.isoformat()})",
+        f"# 创意工厂 — 每日候选（{today.isoformat()}）",
         "",
-        f"Top {min(top_n, len(scored))} of {len(scored)} generated candidates, "
-        "ranked by alpha (factor-weighted, time-decayed) with diversity pressure.",
+        f"共 {len(scored)} 条候选，按 alpha（因子加权 × 时间衰减、含多样性）排序，取前 {min(top_n, len(scored))} 条。",
         "",
-        "> These are *unscreened* candidates from idea-factory. Final go/no-go "
-        "screening is idea-evl's job.",
+        "> 这些是 idea-gen 产出的**未筛选**候选；最终是否推进由 idea-eval 评估决定。",
         "",
     ]
     for rank, s in enumerate(scored[:top_n], start=1):
         c = s.candidate
-        synthetic = " ⚠️ synthetic" if c.confidence == "synthetic" else ""
+        synthetic = " ⚠️ 模拟" if c.confidence == "synthetic" else ""
         lines += [
             f"## {rank}. {c.title}  ·  alpha {s.alpha:.3f}{synthetic}",
             "",
-            f"- **Pain**: {c.pain}",
-            f"- **Solution**: {c.solution}",
-            f"- **Target user**: {c.target_user}",
-            f"- **Source**: {c.source} ({c.observed_on}) · decay {s.decay:.2f}",
-            f"- **Factors**: {_factor_line(s.factors)}",
+            f"- **痛点**：{c.pain}",
+            f"- **方案**：{c.solution}",
+            f"- **目标用户**：{c.target_user}",
+            f"- **来源**：{c.source}（{c.observed_on}）· 衰减 {s.decay:.2f}",
+            f"- **因子**：{_factor_line(s.factors)}",
             "",
         ]
     path.write_text("\n".join(lines), encoding="utf-8")

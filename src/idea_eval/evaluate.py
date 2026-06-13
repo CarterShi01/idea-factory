@@ -48,22 +48,22 @@ RUBRIC_WEIGHTS = {
     "moat_signal": 0.08,
 }
 
-# Human-readable labels for the riskiest-assumption / experiment templates.
+# 最危险假设 / 最小验证实验的中文文案模板。
 _ASSUMPTION = {
-    "pain_intensity": "Assumes the pain is real and sharp — currently the weakest signal.",
-    "build_cost": "Assumes a solo founder can actually ship this — build cost looks high.",
-    "distribution_fit": "Assumes you can reach these users — distribution is the weak point.",
-    "market_freshness": "Assumes the window is still open — the topic may not be fresh.",
-    "competition_density": "Assumes room to differentiate — the space looks crowded.",
-    "moat_signal": "Assumes you can build a moat — defensibility is unclear.",
+    "pain_intensity": "假设这个痛点真实且尖锐——目前这是最弱的信号。",
+    "build_cost": "假设一个人真的能把它做出来——但落地成本看起来偏高。",
+    "distribution_fit": "假设你能触达这批用户——触达渠道是薄弱环节。",
+    "market_freshness": "假设机会窗口还开着——这个方向可能已经不新鲜了。",
+    "competition_density": "假设还有差异化空间——但赛道看起来已经拥挤。",
+    "moat_signal": "假设你能建立护城河——但防御性尚不清晰。",
 }
 _EXPERIMENT = {
-    "pain_intensity": "Run 5 problem-interviews + post the pain in 3 communities; look for unprompted 'I'd pay for this'. (1 week, $0)",
-    "build_cost": "Time-box a 2-day spike on the hardest technical piece; if it isn't solo-shippable, drop it. (2 days, $0)",
-    "distribution_fit": "Reach 20 target users via your existing channels; measure reply/interest rate. (1 week, $0)",
-    "market_freshness": "Check search/HN/GitHub trend over the last 90 days; confirm it's rising, not peaked. (half day, $0)",
-    "competition_density": "Sign up for the top 3 competitors; document the one gap you'd exploit. (2 days, <$100)",
-    "moat_signal": "Spec the one workflow or data asset that would lock users in; validate with 3 users. (3 days, $0)",
+    "pain_intensity": "做 5 场问题访谈 + 在 3 个社群发帖描述痛点；看是否有人主动说“我愿意付费”。（1 周，0 元）",
+    "build_cost": "用 2 天时间盒做最难技术点的预研；若一个人交付不了就放弃。（2 天，0 元）",
+    "distribution_fit": "用你现有渠道触达 20 个目标用户；看回复率/意向率。（1 周，0 元）",
+    "market_freshness": "查近 90 天搜索/HN/GitHub 趋势；确认是在上升而非已见顶。（半天，0 元）",
+    "competition_density": "注册排名前 3 的竞品；记录你要切入的那个差距。（2 天，<100 元）",
+    "moat_signal": "明确一个能锁住用户的工作流或数据资产；找 3 个用户验证。（3 天，0 元）",
 }
 
 
@@ -100,13 +100,13 @@ def _riskiest_dimension(factors: dict[str, float]) -> str:
 def _risk_flags(idea: dict, factors: dict[str, float]) -> list[str]:
     flags: list[str] = []
     if idea.get("confidence") == "synthetic":
-        flags.append("Based on simulated persona pain — needs ≥1 real corroborating signal.")
+        flags.append("基于模拟人物痛点——需要至少 1 条真实信号佐证。")
     if factors.get("competition_density", 1.0) < 0.5:
-        flags.append("Crowded space — differentiation unclear.")
+        flags.append("赛道拥挤——差异化不清晰。")
     if factors.get("moat_signal", 1.0) <= 0.1:
-        flags.append("No obvious moat.")
+        flags.append("没有明显护城河。")
     if factors.get("build_cost", 1.0) < 0.5:
-        flags.append("Heavy build for a one-person company.")
+        flags.append("对一人公司来说工程量偏重。")
     return flags
 
 

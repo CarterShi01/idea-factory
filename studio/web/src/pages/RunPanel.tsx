@@ -2,20 +2,38 @@ import { useState } from "react";
 import { api } from "../api";
 import type { Backend, JudgeBackend, SourceKey } from "../types";
 
-const GEN_BACKENDS: Backend[] = ["rule", "router", "cc", "mock"];
-const JUDGE_BACKENDS: JudgeBackend[] = ["none", "router", "cc", "mock"];
+const GEN_BACKENDS: { key: Backend; label: string }[] = [
+  { key: "rule", label: "规则" },
+  { key: "router", label: "腾讯" },
+  { key: "cc", label: "CC 手动" },
+  { key: "mock", label: "模拟" },
+];
+const JUDGE_BACKENDS: { key: JudgeBackend; label: string }[] = [
+  { key: "none", label: "纯规则" },
+  { key: "router", label: "腾讯" },
+  { key: "cc", label: "CC 手动" },
+  { key: "mock", label: "模拟" },
+];
 const SOURCES: { key: SourceKey; label: string }[] = [
-  { key: "external_event", label: "External" },
-  { key: "brain_inbox", label: "Inbox" },
-  { key: "pain_persona", label: "Persona" },
+  { key: "external_event", label: "外部事件" },
+  { key: "brain_inbox", label: "收件箱" },
+  { key: "pain_persona", label: "模拟痛点" },
 ];
 
-function Seg<T extends string>({ opts, val, onChange }: { opts: T[]; val: T; onChange: (v: T) => void }) {
+function Seg<T extends string>({
+  opts,
+  val,
+  onChange,
+}: {
+  opts: { key: T; label: string }[];
+  val: T;
+  onChange: (v: T) => void;
+}) {
   return (
     <div className="seg">
       {opts.map((o) => (
-        <button key={o} className={val === o ? "on" : ""} onClick={() => onChange(o)}>
-          {o}
+        <button key={o.key} className={val === o.key ? "on" : ""} onClick={() => onChange(o.key)}>
+          {o.label}
         </button>
       ))}
     </div>
@@ -37,10 +55,10 @@ export function RunPanel({ onRan }: { onRan: () => void }) {
 
   async function gen() {
     setBusy("gen");
-    setLog("running generate…");
+    setLog("正在生成…");
     try {
       const r = await api.generate({ backend: gb, sources: srcs.length ? srcs : null, top_n: topN });
-      setLog(`✓ generate → ${r.raw_count} raw → ${r.signal_count} signals → ${r.deduped_count} deduped → ${r.candidate_count} candidates`);
+      setLog(`✓ 生成完成 → ${r.raw_count} 原始 → ${r.signal_count} 信号 → ${r.deduped_count} 去重后 → ${r.candidate_count} 候选`);
       onRan();
     } catch (e) {
       setLog(`✗ ${(e as Error).message}`);
@@ -51,10 +69,10 @@ export function RunPanel({ onRan }: { onRan: () => void }) {
 
   async function evaluate() {
     setBusy("eval");
-    setLog("running evaluate…");
+    setLog("正在评估…");
     try {
       const r = await api.evaluate({ backend: jb, floor, top_n: 20 });
-      setLog(`✓ evaluate → ${r.evaluated} evaluated · ${r.pursue} pursue · ${r.review} review · ${r.killed} killed`);
+      setLog(`✓ 评估完成 → 共 ${r.evaluated} · 推进 ${r.pursue} · 待验证 ${r.review} · 淘汰 ${r.killed}`);
       onRan();
     } catch (e) {
       setLog(`✗ ${(e as Error).message}`);
@@ -67,20 +85,20 @@ export function RunPanel({ onRan }: { onRan: () => void }) {
     <>
       <div className="topbar">
         <div>
-          <h1>Run pipeline</h1>
-          <div className="sub">Trigger generation and screening. Router = Tencent (auto); cc = manual Claude Code handoff.</div>
+          <h1>运行管线</h1>
+          <div className="sub">触发生成与评估。腾讯 = 自动调用；CC 手动 = 写请求包，交由人工在 Claude Code 里处理。</div>
         </div>
       </div>
 
       <div className="grid cols-2">
         <div className="card">
-          <h3>A · GENERATE</h3>
+          <h3>A · 生成</h3>
           <div className="field">
-            <label>Backend</label>
+            <label>后端</label>
             <Seg opts={GEN_BACKENDS} val={gb} onChange={setGb} />
           </div>
           <div className="field">
-            <label>Sources {srcs.length === 0 && <span className="faint">(all)</span>}</label>
+            <label>来源 {srcs.length === 0 && <span className="faint">（全部）</span>}</label>
             <div className="seg">
               {SOURCES.map((s) => (
                 <button key={s.key} className={srcs.includes(s.key) ? "on" : ""} onClick={() => toggleSrc(s.key)}>
@@ -90,22 +108,22 @@ export function RunPanel({ onRan }: { onRan: () => void }) {
             </div>
           </div>
           <div className="field">
-            <label>Top N in report</label>
+            <label>报告条数</label>
             <input className="txt" type="number" value={topN} onChange={(e) => setTopN(+e.target.value)} />
           </div>
           <button className="btn" disabled={!!busy} onClick={gen}>
-            {busy === "gen" ? <span className="spinner" /> : "Run generate"}
+            {busy === "gen" ? <span className="spinner" /> : "运行生成"}
           </button>
         </div>
 
         <div className="card">
-          <h3>B · EVALUATE</h3>
+          <h3>B · 评估</h3>
           <div className="field">
-            <label>Judge backend</label>
+            <label>评委后端</label>
             <Seg opts={JUDGE_BACKENDS} val={jb} onChange={setJb} />
           </div>
           <div className="field">
-            <label>Kill-gate floor ({floor.toFixed(2)})</label>
+            <label>淘汰闸阈值（{floor.toFixed(2)}）</label>
             <input
               className="txt"
               type="range"
@@ -117,17 +135,16 @@ export function RunPanel({ onRan }: { onRan: () => void }) {
             />
           </div>
           <div className="muted-note" style={{ marginBottom: 14 }}>
-            The LLM judge runs only on kill-gate survivors (token-thrifty). <b>cc</b> writes a request pack and pauses
-            for a manual Claude Code session.
+            LLM 评委只评估过了淘汰闸的幸存者（省 token）。<b>CC 手动</b> 会写出请求包并暂停，交由人工在 Claude Code 会话里处理。
           </div>
           <button className="btn" disabled={!!busy} onClick={evaluate}>
-            {busy === "eval" ? <span className="spinner" /> : "Run evaluate"}
+            {busy === "eval" ? <span className="spinner" /> : "运行评估"}
           </button>
         </div>
       </div>
 
       <div className="card" style={{ marginTop: 18 }}>
-        <h3>RESULT</h3>
+        <h3>结果</h3>
         <div className="runlog">{log || "—"}</div>
       </div>
     </>

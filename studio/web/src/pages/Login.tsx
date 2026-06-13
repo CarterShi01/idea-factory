@@ -13,8 +13,8 @@ export function Login({ onDone }: { onDone: () => void }) {
     try {
       await api.login(pw);
       onDone();
-    } catch (e) {
-      setErr((e as Error).message);
+    } catch {
+      setErr("密码错误");
     } finally {
       setBusy(false);
     }
@@ -24,25 +24,25 @@ export function Login({ onDone }: { onDone: () => void }) {
     <div className="login-wrap">
       <div className="login">
         <div className="brand" style={{ justifyContent: "center", paddingBottom: 22 }}>
-          <div className="logo">IF</div>
+          <div className="logo">创</div>
           <div className="name">
-            Idea Factory<small>STUDIO</small>
+            创意工厂<small>控制台</small>
           </div>
         </div>
         <div className="card">
-          <h2>Sign in</h2>
-          <p>Control panel for the 3-source idea engine.</p>
+          <h2>登录</h2>
+          <p>三源创意引擎的控制面板。</p>
           <form onSubmit={submit}>
             <input
               className="txt"
               type="password"
-              placeholder="Password"
+              placeholder="请输入密码"
               value={pw}
               autoFocus
               onChange={(e) => setPw(e.target.value)}
             />
             <button className="btn" style={{ width: "100%", marginTop: 14 }} disabled={busy}>
-              {busy ? <span className="spinner" /> : "Enter"}
+              {busy ? <span className="spinner" /> : "进入"}
             </button>
           </form>
           {err && <div className="err">{err}</div>}

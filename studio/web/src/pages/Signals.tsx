@@ -2,12 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import type { Signal } from "../types";
 import { SyntheticChip } from "../components/VerdictChip";
-
-const SRC_LABEL: Record<string, string> = {
-  external_event: "External event",
-  brain_inbox: "Founder inbox",
-  pain_persona: "Simulated pain",
-};
+import { sourceLabel } from "../labels";
 
 export function Signals() {
   const [rows, setRows] = useState<Signal[] | null>(null);
@@ -18,23 +13,23 @@ export function Signals() {
   }, []);
 
   if (err) return <div className="empty">{err}</div>;
-  if (!rows) return <div className="empty"><span className="spinner" /> loading…</div>;
+  if (!rows) return <div className="empty"><span className="spinner" /> 加载中…</div>;
 
   return (
     <>
       <div className="topbar">
         <div>
-          <h1>Signals</h1>
-          <div className="sub">{rows.length} normalized signals across the three sources</div>
+          <h1>信号</h1>
+          <div className="sub">三个来源共 {rows.length} 条归一化信号</div>
         </div>
       </div>
       <div className="card" style={{ padding: 0 }}>
         <table>
           <thead>
             <tr>
-              <th>Pain / signal</th>
-              <th style={{ width: 130 }}>Source</th>
-              <th style={{ width: 110 }}>Observed</th>
+              <th>痛点 / 信号</th>
+              <th style={{ width: 130 }}>来源</th>
+              <th style={{ width: 110 }}>观察时间</th>
             </tr>
           </thead>
           <tbody>
@@ -47,7 +42,7 @@ export function Signals() {
                   <div className="dim" style={{ fontSize: 12.5, marginTop: 3 }}>{s.pain_statement}</div>
                 </td>
                 <td className="dim">
-                  {SRC_LABEL[s.source] ?? s.source}
+                  {sourceLabel(s.source)}
                   <div className="faint mono" style={{ fontSize: 11.5 }}>{s.source_name}</div>
                 </td>
                 <td className="faint mono">{s.observed_on}</td>

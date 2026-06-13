@@ -1,11 +1,11 @@
 export type Tab = "overview" | "ideas" | "decisions" | "signals" | "run";
 
 const ITEMS: { key: Tab; label: string; ico: string }[] = [
-  { key: "overview", label: "Overview", ico: "◉" },
-  { key: "ideas", label: "Ideas", ico: "✦" },
-  { key: "decisions", label: "Decisions", ico: "⊘" },
-  { key: "signals", label: "Signals", ico: "≈" },
-  { key: "run", label: "Run pipeline", ico: "▷" },
+  { key: "overview", label: "概览", ico: "◉" },
+  { key: "ideas", label: "创意", ico: "✦" },
+  { key: "decisions", label: "评估决策", ico: "⊘" },
+  { key: "signals", label: "信号", ico: "≈" },
+  { key: "run", label: "运行管线", ico: "▷" },
 ];
 
 export function Sidebar({
@@ -20,10 +20,10 @@ export function Sidebar({
   return (
     <aside className="sidebar">
       <div className="brand">
-        <div className="logo">IF</div>
+        <div className="logo">创</div>
         <div className="name">
-          Idea Factory
-          <small>STUDIO</small>
+          创意工厂
+          <small>控制台</small>
         </div>
       </div>
       <nav className="nav">
@@ -36,9 +36,9 @@ export function Sidebar({
       </nav>
       <div className="foot">
         <button className="nav" style={{ all: "unset", cursor: "pointer", color: "inherit" }} onClick={onLogout}>
-          Sign out
+          退出登录
         </button>
-        <div style={{ marginTop: 8 }}>v0.1 · 3-source idea engine</div>
+        <div style={{ marginTop: 8 }}>v0.1 · 三源创意引擎</div>
       </div>
     </aside>
   );

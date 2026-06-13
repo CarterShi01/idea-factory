@@ -54,9 +54,9 @@ def _pain_statement(raw: dict) -> str:
     explicit = (raw.get("pain") or "").strip()
     if explicit:
         return explicit
-    who = (raw.get("target_user") or "Users").strip()
+    who = (raw.get("target_user") or "用户").strip()
     what = (raw.get("title") or raw.get("text") or "").strip()
-    return f"{who} struggle with {what}" if what else ""
+    return f"{who}在「{what}」上遇到困扰" if what else ""
 
 
 def normalize_record(raw: dict) -> Signal:

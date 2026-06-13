@@ -1,27 +1,27 @@
 [
   {
-    "persona": "Bootstrapped solo SaaS founder",
+    "persona": "自力更生的独立 SaaS 创始人",
     "domain": "saas-ops",
     "pains": [
       {
-        "summary": "Solo founders waste hours manually triaging support emails instead of building",
-        "verbatim": "I spend my mornings answering the same support emails by hand and it is exhausting and repetitive.",
+        "summary": "独立创始人浪费大量时间手动分拣客服邮件，而不是做产品",
+        "verbatim": "我整个上午都在手动回复同样的客服邮件，又累又重复。",
         "corroborated": true
       },
       {
-        "summary": "Founders lack a cheap way to test pricing changes without breaking billing",
-        "verbatim": "Every time I want to test a new price I am terrified of breaking my Stripe billing.",
+        "summary": "创始人缺少一种不弄坏计费就能测试定价改动的廉价方式",
+        "verbatim": "每次想测试新价格，我都怕把 Stripe 计费弄崩。",
         "corroborated": false
       }
     ]
   },
   {
-    "persona": "Part-time angel investor who also builds software",
+    "persona": "兼做软件的兼职天使投资人",
     "domain": "investing",
     "pains": [
       {
-        "summary": "Investors struggle to track which portfolio companies need attention each week",
-        "verbatim": "I never know which of my portfolio companies is quietly struggling until it is too late.",
+        "summary": "投资人难以每周跟踪哪些被投公司需要关注",
+        "verbatim": "我总是等到来不及了，才发现某家被投公司在悄悄出问题。",
         "corroborated": true
       }
     ]

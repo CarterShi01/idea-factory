@@ -15,8 +15,13 @@ def write_json(evaluations: list[Evaluation], path: Path) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+_VERDICT_ZH = {PURSUE: "推进", REVIEW: "待验证", KILL: "淘汰"}
+
+
 def _factor_line(factors: dict[str, float]) -> str:
-    return " · ".join(f"{name} {value:.2f}" for name, value in factors.items())
+    from idea_core.factors import label
+
+    return " · ".join(f"{label(name)} {value:.2f}" for name, value in factors.items())
 
 
 def write_memos(
@@ -30,41 +35,39 @@ def write_memos(
     killed = [e for e in evaluations if e.verdict == KILL]
 
     lines: list[str] = [
-        f"# Idea Factory — Decision Memos ({today.isoformat()})",
+        f"# 创意工厂 — 决策备忘（{today.isoformat()}）",
         "",
-        f"{len(survivors)} ideas worth a look · {len(killed)} killed by the screen "
-        f"· {len(evaluations)} evaluated.",
+        f"值得一看 {len(survivors)} 条 · 被筛掉 {len(killed)} 条 · 共评估 {len(evaluations)} 条。",
         "",
-        "> Output of idea-eval: the kill-gate screen over idea-gen's candidates. "
-        "A fatal flaw on a critical dimension (no real pain, or not solo-buildable) "
-        "kills an idea outright.",
+        "> idea-eval 的产出：对 idea-gen 候选的淘汰闸筛选。任一关键维度存在致命短板"
+        "（没有真实痛点、或一人公司做不了）即直接淘汰。",
         "",
     ]
     for rank, e in enumerate(survivors, start=1):
-        synthetic = " ⚠️ synthetic" if e.confidence == "synthetic" else ""
-        judged = " · judged by LLM" if e.judged_by == "llm" else ""
+        synthetic = " ⚠️ 模拟" if e.confidence == "synthetic" else ""
+        judged = " · LLM 评委" if e.judged_by == "llm" else ""
         lines += [
             f"## {rank}. {e.title}",
             "",
-            f"- **Verdict**: {e.verdict.upper()} · score {e.eval_score:.0f}/100{synthetic}{judged}",
+            f"- **结论**：{_VERDICT_ZH.get(e.verdict, e.verdict)} · 得分 {e.eval_score:.0f}/100{synthetic}{judged}",
         ]
         if e.killer_objection:
-            lines.append(f"- **Killer objection**: {e.killer_objection}")
+            lines.append(f"- **最致命质疑**：{e.killer_objection}")
         lines += [
-            f"- **Riskiest assumption**: {e.riskiest_assumption}",
-            f"- **Cheap test (RAT)**: {e.cheap_experiment}",
+            f"- **最危险假设**：{e.riskiest_assumption}",
+            f"- **最小验证**：{e.cheap_experiment}",
         ]
         if e.risk_flags:
-            lines.append(f"- **Risk flags**: {'; '.join(e.risk_flags)}")
-        lines += [f"- **Factors**: {_factor_line(e.factors)}", ""]
+            lines.append(f"- **风险提示**：{'；'.join(e.risk_flags)}")
+        lines += [f"- **因子**：{_factor_line(e.factors)}", ""]
 
     if killed:
-        lines += ["---", "", "## Killed by the screen", ""]
+        lines += ["---", "", "## 被淘汰", ""]
         for e in killed:
             reason = (
-                f"fatal flaw: {', '.join(e.killed_by)}"
+                f"致命短板：{'、'.join(e.killed_by)}"
                 if e.killed_by
-                else f"low score ({e.eval_score:.0f})"
+                else f"得分过低（{e.eval_score:.0f}）"
             )
             lines.append(f"- ~~{e.title}~~ — {reason}")
         lines.append("")

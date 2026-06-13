@@ -22,23 +22,24 @@ from idea_core.models import IdeaCandidate, Signal
 
 # Each template turns a pain into a differently-angled solution. Keeping a small
 # fixed set makes generation deterministic and reproducible for the demo.
+# 中文文案：面向中文用户。
 _SOLUTION_TEMPLATES: list[tuple[str, str]] = [
-    ("tool", "A focused tool that removes the manual work behind: {pain}"),
-    ("agent", "An LLM agent that monitors and acts on: {pain}"),
-    ("service", "A done-for-you service that resolves: {pain}"),
+    ("工具", "一个聚焦的工具，自动消除以下痛点背后的手工劳动：{pain}"),
+    ("智能体", "一个 LLM 智能体，持续监控并自动处理：{pain}"),
+    ("服务", "一项代客完成的服务，彻底解决：{pain}"),
 ]
 
-_DEFAULT_USER = "Software builders and indie founders"
+_DEFAULT_USER = "软件开发者与独立创业者"
 
 
 def _target_user(signal: Signal) -> str:
     cat = (signal.category or "").lower()
     if "dev" in cat or "ai" in cat or "software" in cat:
-        return "Developers and technical founders"
+        return "开发者与技术型创始人"
     if "invest" in cat or "finance" in cat:
-        return "Solo investors tracking deal flow"
+        return "管理 deal flow 的独立投资人"
     if "market" in cat or "content" in cat:
-        return "Indie marketers and creators"
+        return "独立营销人与创作者"
     return _DEFAULT_USER
 
 
@@ -54,7 +55,7 @@ def _rule_based_backend(signal: Signal) -> list[IdeaCandidate]:
                 id=f"{signal.id}-{idx}",
                 signal_id=signal.id,
                 source=signal.source,
-                title=f"{angle.title()} for: {signal.title}"[:120],
+                title=f"面向「{signal.title}」的{angle}"[:120],
                 pain=pain,
                 solution=template.format(pain=pain),
                 target_user=user,

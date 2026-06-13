@@ -3,6 +3,7 @@ import { api } from "../api";
 import type { Idea } from "../types";
 import { FactorBars } from "../components/FactorBar";
 import { SyntheticChip } from "../components/VerdictChip";
+import { sourceLabel } from "../labels";
 
 export function Ideas() {
   const [ideas, setIdeas] = useState<Idea[] | null>(null);
@@ -14,15 +15,15 @@ export function Ideas() {
   }, []);
 
   if (err) return <div className="empty">{err}</div>;
-  if (!ideas) return <div className="empty"><span className="spinner" /> loading…</div>;
-  if (!ideas.length) return <div className="empty">No candidates yet — run the generate stage.</div>;
+  if (!ideas) return <div className="empty"><span className="spinner" /> 加载中…</div>;
+  if (!ideas.length) return <div className="empty">还没有候选创意 —— 先运行“生成”阶段。</div>;
 
   return (
     <>
       <div className="topbar">
         <div>
-          <h1>Ideas</h1>
-          <div className="sub">{ideas.length} ranked candidates · alpha = factor-weighted, time-decayed</div>
+          <h1>创意</h1>
+          <div className="sub">{ideas.length} 条已排序候选 · alpha = 因子加权 × 时间衰减</div>
         </div>
       </div>
       <div className="card" style={{ padding: 0 }}>
@@ -30,10 +31,10 @@ export function Ideas() {
           <thead>
             <tr>
               <th style={{ width: 34 }}>#</th>
-              <th>Idea</th>
-              <th style={{ width: 90 }}>Source</th>
+              <th>创意</th>
+              <th style={{ width: 90 }}>来源</th>
               <th style={{ width: 70 }}>Alpha</th>
-              <th style={{ width: 70 }}>Decay</th>
+              <th style={{ width: 70 }}>衰减</th>
             </tr>
           </thead>
           <tbody>
@@ -47,7 +48,7 @@ export function Ideas() {
                     </div>
                     <div className="dim" style={{ fontSize: 12.5, marginTop: 3 }}>{it.pain}</div>
                   </td>
-                  <td className="dim mono">{it.source.replace("_event", "").replace("_inbox", "")}</td>
+                  <td className="dim">{sourceLabel(it.source)}</td>
                   <td className="alpha">{it.alpha.toFixed(3)}</td>
                   <td className="faint mono">{it.decay.toFixed(2)}</td>
                 </tr>
@@ -57,9 +58,9 @@ export function Ideas() {
                     <td colSpan={4} style={{ paddingTop: 0 }}>
                       <div className="grid cols-2" style={{ gap: 18, paddingBottom: 6 }}>
                         <div>
-                          <div className="kv"><b>Solution:</b> {it.solution}</div>
-                          <div className="kv"><b>Target user:</b> {it.target_user}</div>
-                          <div className="kv faint">{it.source} · {it.observed_on}{it.category ? ` · ${it.category}` : ""}</div>
+                          <div className="kv"><b>方案：</b> {it.solution}</div>
+                          <div className="kv"><b>目标用户：</b> {it.target_user}</div>
+                          <div className="kv faint">{sourceLabel(it.source)} · {it.observed_on}{it.category ? ` · ${it.category}` : ""}</div>
                         </div>
                         <div><FactorBars factors={it.factors} /></div>
                       </div>

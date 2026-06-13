@@ -128,6 +128,20 @@ FACTORS = {
     "distribution_fit": distribution_fit,
 }
 
+# Chinese display labels for the factor keys (keys stay English identifiers).
+FACTOR_LABELS = {
+    "market_freshness": "市场新鲜度",
+    "pain_intensity": "痛点强度",
+    "build_cost": "可落地性",
+    "moat_signal": "护城河",
+    "competition_density": "竞争稀缺度",
+    "distribution_fit": "触达匹配度",
+}
+
+
+def label(name: str) -> str:
+    return FACTOR_LABELS.get(name, name)
+
 
 def compute_factors(c: IdeaCandidate) -> dict[str, float]:
     """Run every factor over a candidate, rounding for stable serialization."""
