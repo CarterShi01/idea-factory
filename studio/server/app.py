@@ -136,6 +136,9 @@ def do_generate(body: dict) -> dict:
         top_n=int(body.get("top_n", 15)),
         sources=body.get("sources") or None,
         gen_backend=body.get("backend", "rule"),
+        live=bool(body.get("live", False)),
+        use_state=bool(body.get("use_state", False)),
+        persona_backend=body.get("persona_backend", "static"),
     )
     return {
         "raw_count": r.raw_count,
@@ -143,6 +146,26 @@ def do_generate(body: dict) -> dict:
         "deduped_count": r.deduped_count,
         "candidate_count": r.candidate_count,
     }
+
+
+def do_inbox(body: dict) -> dict:
+    """源② 持续录入:把一条灵感 append 到 data/raw/inbox.jsonl(零 token、本地)。"""
+    import json as _json
+
+    title = (body.get("title") or "").strip()
+    if not title:
+        return {"ok": False, "error": "empty"}
+    rec = {
+        "title": title,
+        "pain": (body.get("pain") or title).strip(),
+        "category": (body.get("category") or "ai-productivity").strip(),
+        "observed_on": _ref_date(body).isoformat(),
+    }
+    path = DATA_DIR / "raw" / "inbox.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as fh:
+        fh.write(_json.dumps(rec, ensure_ascii=False) + "\n")
+    return {"ok": True}
 
 
 def do_evaluate(body: dict) -> dict:
@@ -241,6 +264,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(do_generate(body))
             if path == "/api/run/evaluate":
                 return self._json(do_evaluate(body))
+            if path == "/api/inbox":
+                return self._json(do_inbox(body))
         except Exception as exc:  # noqa: BLE001 — surface run errors to the UI
             return self._json({"error": f"{type(exc).__name__}: {exc}"}, 500)
         return self._json({"error": "not found"}, 404)

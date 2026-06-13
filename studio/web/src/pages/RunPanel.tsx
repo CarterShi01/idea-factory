@@ -14,6 +14,12 @@ const JUDGE_BACKENDS: { key: JudgeBackend; label: string }[] = [
   { key: "cc", label: "CC 手动" },
   { key: "mock", label: "模拟" },
 ];
+const PERSONA_BACKENDS: { key: string; label: string }[] = [
+  { key: "static", label: "静态" },
+  { key: "router", label: "腾讯" },
+  { key: "cc", label: "CC 手动" },
+  { key: "mock", label: "模拟" },
+];
 const SOURCES: { key: SourceKey; label: string }[] = [
   { key: "external_event", label: "外部事件" },
   { key: "brain_inbox", label: "收件箱" },
@@ -44,10 +50,14 @@ export function RunPanel({ onRan }: { onRan: () => void }) {
   const [gb, setGb] = useState<Backend>("rule");
   const [srcs, setSrcs] = useState<SourceKey[]>([]);
   const [topN, setTopN] = useState(15);
+  const [live, setLive] = useState(false);
+  const [dyn, setDyn] = useState(false);
+  const [pb, setPb] = useState("static");
   const [jb, setJb] = useState<JudgeBackend>("none");
   const [floor, setFloor] = useState(0.25);
+  const [idea, setIdea] = useState("");
   const [log, setLog] = useState("");
-  const [busy, setBusy] = useState<"" | "gen" | "eval">("");
+  const [busy, setBusy] = useState<"" | "gen" | "eval" | "inbox">("");
 
   function toggleSrc(s: SourceKey) {
     setSrcs((cur) => (cur.includes(s) ? cur.filter((x) => x !== s) : [...cur, s]));
@@ -57,7 +67,14 @@ export function RunPanel({ onRan }: { onRan: () => void }) {
     setBusy("gen");
     setLog("正在生成…");
     try {
-      const r = await api.generate({ backend: gb, sources: srcs.length ? srcs : null, top_n: topN });
+      const r = await api.generate({
+        backend: gb,
+        sources: srcs.length ? srcs : null,
+        top_n: topN,
+        live,
+        use_state: dyn,
+        persona_backend: pb,
+      });
       setLog(`✓ 生成完成 → ${r.raw_count} 原始 → ${r.signal_count} 信号 → ${r.deduped_count} 去重后 → ${r.candidate_count} 候选`);
       onRan();
     } catch (e) {
@@ -81,12 +98,42 @@ export function RunPanel({ onRan }: { onRan: () => void }) {
     }
   }
 
+  async function addIdea() {
+    if (!idea.trim()) return;
+    setBusy("inbox");
+    try {
+      await api.inbox({ title: idea.trim() });
+      setLog(`✓ 已记入灵感收件箱：${idea.trim()}`);
+      setIdea("");
+    } catch (e) {
+      setLog(`✗ ${(e as Error).message}`);
+    } finally {
+      setBusy("");
+    }
+  }
+
   return (
     <>
       <div className="topbar">
         <div>
           <h1>运行管线</h1>
-          <div className="sub">触发生成与评估。腾讯 = 自动调用；CC 手动 = 写请求包，交由人工在 Claude Code 里处理。</div>
+          <div className="sub">触发生成与评估。腾讯 = 自动调用；CC 手动 = 写请求包交人工处理；动态 = 记历史、只取增量。</div>
+        </div>
+      </div>
+
+      <div className="card" style={{ marginBottom: 18 }}>
+        <h3>源② · 记一条灵感</h3>
+        <div style={{ display: "flex", gap: 10 }}>
+          <input
+            className="txt"
+            placeholder="随手记下一个念头，回车或点按钮"
+            value={idea}
+            onChange={(e) => setIdea(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && addIdea()}
+          />
+          <button className="btn ghost" disabled={!!busy} onClick={addIdea} style={{ whiteSpace: "nowrap" }}>
+            {busy === "inbox" ? <span className="spinner" /> : "记一条"}
+          </button>
         </div>
       </div>
 
@@ -106,6 +153,18 @@ export function RunPanel({ onRan }: { onRan: () => void }) {
                 </button>
               ))}
             </div>
+          </div>
+          <div className="field">
+            <label>源③ 痛点合成（人群×痛点）</label>
+            <Seg opts={PERSONA_BACKENDS} val={pb} onChange={setPb} />
+          </div>
+          <div className="field" style={{ display: "flex", gap: 18 }}>
+            <label style={{ cursor: "pointer" }}>
+              <input type="checkbox" checked={live} onChange={(e) => setLive(e.target.checked)} /> 实时抓取（联网）
+            </label>
+            <label style={{ cursor: "pointer" }}>
+              <input type="checkbox" checked={dyn} onChange={(e) => setDyn(e.target.checked)} /> 动态状态（去重+趋势）
+            </label>
           </div>
           <div className="field">
             <label>报告条数</label>
@@ -135,7 +194,7 @@ export function RunPanel({ onRan }: { onRan: () => void }) {
             />
           </div>
           <div className="muted-note" style={{ marginBottom: 14 }}>
-            LLM 评委只评估过了淘汰闸的幸存者（省 token）。<b>CC 手动</b> 会写出请求包并暂停，交由人工在 Claude Code 会话里处理。
+            LLM 评委只评估过了淘汰闸的幸存者（省 token）。<b>CC 手动</b> 会写出请求包并暂停，交人工在 Claude Code 里处理。
           </div>
           <button className="btn" disabled={!!busy} onClick={evaluate}>
             {busy === "eval" ? <span className="spinner" /> : "运行评估"}

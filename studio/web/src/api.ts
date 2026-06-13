@@ -33,4 +33,6 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+  inbox: (body: Record<string, unknown>) =>
+    req<{ ok: boolean }>("/api/inbox", { method: "POST", body: JSON.stringify(body) }),
 };
