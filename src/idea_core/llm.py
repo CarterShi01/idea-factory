@@ -317,14 +317,27 @@ def load_step_config(step: str, config_dir: str | Path | None = None) -> dict:
 
 
 def build_request(item_id: str, user: str, config: dict) -> LLMRequest:
-    """Turn a rendered user prompt + a step config into an LLMRequest."""
+    """Turn a rendered user prompt + a step config into an LLMRequest.
+
+    ``config['model_env']`` (optional) — name of an env var to read the per-step
+    model from (e.g. ``IDEA_LLM_JUDGE_MODEL``). Lets generate vs critique vs
+    judge run on *different* models (anti self-enhancement) without editing
+    config or code. Resolution order: env[model_env] → config.model → backend
+    default.
+    """
+    model = config.get("model")
+    env_name = config.get("model_env")
+    if env_name:
+        env_model = os.environ.get(env_name)
+        if env_model:
+            model = env_model
     return LLMRequest(
         id=item_id,
         system=config.get("system", ""),
         user=user,
         schema=config.get("schema"),
         temperature=config.get("temperature", 0.2),
-        model=config.get("model"),
+        model=model,
     )
 
 

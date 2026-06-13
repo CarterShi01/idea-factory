@@ -16,6 +16,7 @@ def write_json(evaluations: list[Evaluation], path: Path) -> None:
 
 
 _VERDICT_ZH = {PURSUE: "推进", REVIEW: "待验证", KILL: "淘汰"}
+_CONF_ZH = {"high": "高", "medium": "中", "low": "低"}
 
 
 def _factor_line(factors: dict[str, float]) -> str:
@@ -46,10 +47,12 @@ def write_memos(
     for rank, e in enumerate(survivors, start=1):
         synthetic = " ⚠️ 模拟" if e.confidence == "synthetic" else ""
         judged = " · LLM 评委" if e.judged_by == "llm" else ""
+        conf = f" · 置信度 {_CONF_ZH[e.judge_confidence]}" if e.judge_confidence in _CONF_ZH else ""
+        demoted = " · ⚠️ 低置信度自动降级到待验证" if e.confidence_demoted else ""
         lines += [
             f"## {rank}. {e.title}",
             "",
-            f"- **结论**：{_VERDICT_ZH.get(e.verdict, e.verdict)} · 得分 {e.eval_score:.0f}/100{synthetic}{judged}",
+            f"- **结论**：{_VERDICT_ZH.get(e.verdict, e.verdict)} · 得分 {e.eval_score:.0f}/100{conf}{synthetic}{judged}{demoted}",
         ]
         if e.critique:
             lines.append("- **对抗式批判**：")

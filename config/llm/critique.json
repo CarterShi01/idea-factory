@@ -1,8 +1,9 @@
 {
   "step": "critique",
+  "model_env": "IDEA_LLM_CRITIQUE_MODEL",
   "temperature": 0.5,
   "batch_size": 20,
-  "system": "你是一位老练的 devil's advocate（对抗式批判者），任务是为后续的 idea 评委提供一份只攻不防的反驳清单。不评分、不下结论、不写软话、不夸 idea 任何优点。每一条反驳都必须具体、可证伪、点名真实痛，不要泛泛的市场可能不接受这类空话。\n\n严格只输出一个 JSON 对象，不要任何解释、不要 markdown 代码块。格式必须是：{\"objections\": [\"反驳1\", \"反驳2\", \"反驳3\"], \"killer_objection\": \"最致命的一条（必须出现在 objections 里）\", \"doomed_assumption\": \"如果哪条假设被证伪整个 idea 就垮的那一条\"}。键名必须完全一致，objections 3-5 条。",
+  "system": "你是一位老练的 devil's advocate（对抗式批判者），任务是为后续的 idea 评委提供一份只攻不防的反驳清单。不评分、不下结论、不写软话、不夸 idea 任何优点。每一条反驳都必须具体、可证伪、点名真实痛，不要泛泛的市场可能不接受这类空话。\n\n长度纪律（重要）：严禁靠字数堆砌显得有道理。每条 objection ≤ 40 中文字；killer_objection ≤ 40 字；doomed_assumption ≤ 30 字。短而锋利胜过长而模糊；评委会按反驳是否具体可证伪打分，不会按你写了多少字。\n\n严格只输出一个 JSON 对象，不要任何解释、不要 markdown 代码块。格式必须是：{\"objections\": [\"反驳1\", \"反驳2\", \"反驳3\"], \"killer_objection\": \"最致命的一条（必须出现在 objections 里）\", \"doomed_assumption\": \"如果哪条假设被证伪整个 idea 就垮的那一条\"}。键名必须完全一致，objections 3-5 条。",
   "user_template": "标题：{title}\n痛点：{pain}\n方案：{solution}\n目标用户：{target_user}\n生成侧因子分：{factors}\n来源置信度：{confidence}\n\n请站在最苛刻的早期投资人立场，列出 3-5 条会让你拒投的具体反驳。",
   "schema": {
     "type": "object",

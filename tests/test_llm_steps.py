@@ -288,6 +288,122 @@ def test_pipeline_skips_critique_when_disabled(tmp_path):
     assert critique_calls["n"] == 0
 
 
+# --- P0(2): anti-bias controls -------------------------------------------
+
+
+def test_judge_records_confidence():
+    ideas = [_high_factor_idea()]
+    evals = evaluate_all(ideas)
+
+    def responder(req):
+        return LLMResponse(
+            id=req.id,
+            data={
+                "verdict": "review",
+                "score": 50,
+                "confidence": "medium",
+                "respond_to_critique": "ack",
+                "killer_objection": "x",
+                "cheap_experiment": "y",
+            },
+        )
+
+    out = judge_survivors(evals, {"i1": ideas[0]}, MockBackend(responder), {"user_template": "{title}"})
+    assert out[0].judge_confidence == "medium"
+    assert out[0].confidence_demoted is False
+    assert out[0].verdict == "review"  # unchanged
+
+
+def test_low_confidence_pursue_is_demoted_to_review():
+    """Anti-overconfidence: when the LLM says pursue but admits low confidence,
+    the system forces a review (human audit lane), not an auto-pursue."""
+    ideas = [_high_factor_idea()]
+    evals = evaluate_all(ideas)
+
+    def responder(req):
+        return LLMResponse(
+            id=req.id,
+            data={
+                "verdict": "pursue",
+                "score": 72,
+                "confidence": "low",
+                "respond_to_critique": "ack",
+                "killer_objection": "x",
+                "cheap_experiment": "y",
+            },
+        )
+
+    out = judge_survivors(evals, {"i1": ideas[0]}, MockBackend(responder), {"user_template": "{title}"})
+    e = out[0]
+    assert e.verdict == "review"
+    assert e.confidence_demoted is True
+    assert e.eval_score == 72  # score preserved — only verdict changes
+
+
+def test_low_confidence_kill_is_demoted_to_review():
+    ideas = [_high_factor_idea()]
+    evals = evaluate_all(ideas)
+
+    def responder(req):
+        return LLMResponse(
+            id=req.id,
+            data={
+                "verdict": "kill",
+                "score": 20,
+                "confidence": "low",
+                "respond_to_critique": "weak",
+                "killer_objection": "x",
+                "cheap_experiment": "y",
+            },
+        )
+
+    out = judge_survivors(evals, {"i1": ideas[0]}, MockBackend(responder), {"user_template": "{title}"})
+    assert out[0].verdict == "review"
+    assert out[0].confidence_demoted is True
+
+
+def test_high_confidence_kill_is_not_demoted():
+    ideas = [_high_factor_idea()]
+    evals = evaluate_all(ideas)
+
+    def responder(req):
+        return LLMResponse(
+            id=req.id,
+            data={
+                "verdict": "kill",
+                "score": 15,
+                "confidence": "high",
+                "respond_to_critique": "no defense",
+                "killer_objection": "x",
+                "cheap_experiment": "y",
+            },
+        )
+
+    out = judge_survivors(evals, {"i1": ideas[0]}, MockBackend(responder), {"user_template": "{title}"})
+    assert out[0].verdict == KILL
+    assert out[0].confidence_demoted is False
+
+
+def test_build_request_reads_model_from_env(monkeypatch):
+    """model_env lets each step (generate/critique/judge) bind to a different
+    model so generation ≠ evaluation isn't enforced by a single global default."""
+    from idea_core.llm import build_request
+
+    monkeypatch.setenv("MY_TEST_MODEL_VAR", "tc-think")
+    config = {"system": "s", "model_env": "MY_TEST_MODEL_VAR"}
+    req = build_request("id1", "u", config)
+    assert req.model == "tc-think"
+
+
+def test_build_request_falls_back_when_env_missing(monkeypatch):
+    from idea_core.llm import build_request
+
+    monkeypatch.delenv("MY_TEST_MODEL_VAR", raising=False)
+    config = {"system": "s", "model_env": "MY_TEST_MODEL_VAR", "model": "fallback-model"}
+    req = build_request("id1", "u", config)
+    assert req.model == "fallback-model"
+
+
 # --- CC handoff (manual mode) raises, never calls CC ----------------------
 
 

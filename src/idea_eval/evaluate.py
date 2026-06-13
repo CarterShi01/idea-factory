@@ -81,7 +81,9 @@ class Evaluation:
     factors: dict[str, float] = field(default_factory=dict)
     # B-step (LLM-as-judge) outputs
     killer_objection: str = ""
-    judged_by: str = "rule"     # "rule" or "llm"
+    judged_by: str = "rule"          # "rule" or "llm"
+    judge_confidence: str = ""       # "high" / "medium" / "low" (LLM self-reported)
+    confidence_demoted: bool = False  # True if low-confidence pursue/kill auto-demoted to review
     # B-prep: devil's advocate critique (runs before the judge, separate prompt/call)
     critique: list[str] = field(default_factory=list)
     critique_killer: str = ""
@@ -280,5 +282,13 @@ def judge_survivors(
         e.riskiest_assumption = d.get("riskiest_assumption", "") or e.riskiest_assumption
         e.cheap_experiment = d.get("cheap_experiment", "") or e.cheap_experiment
         e.judge_rebuttal = d.get("respond_to_critique", "") or e.judge_rebuttal
+        conf = d.get("confidence", "")
+        if conf in ("high", "medium", "low"):
+            e.judge_confidence = conf
+            # Anti-overconfidence: low-confidence pursue/kill is forced to review
+            # so a borderline call always falls into the human-audit lane.
+            if conf == "low" and e.verdict in (PURSUE, KILL):
+                e.verdict = REVIEW
+                e.confidence_demoted = True
 
     return _sort(evaluations)
