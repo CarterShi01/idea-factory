@@ -1,0 +1,61 @@
+{
+  "_comment": "可增长的人群 taxonomy。种子人群面向中国创业;运行时会派生(源①真实信号里反复出现的 target_user 自动登记)与裂变(LLM 细分)。叶子人群才会被挖。monetizability_prior/reachability 为 0-1 先验;evidence_topics 用于和源①真实信号交叉佐证。",
+  "segments": [
+    {
+      "id": "indie_dev", "label": "独立开发者", "parent": null,
+      "axes": { "occupation": "独立开发", "budget": "低", "workflow_stage": "全栈" },
+      "reachability": 0.9, "monetizability_prior": 0.6,
+      "evidence_topics": ["独立开发", "indie", "saas", "副业"],
+      "last_mined_on": "1970-01-01", "children": ["indie_dev.saas", "indie_dev.tooling"]
+    },
+    {
+      "id": "indie_dev.saas", "label": "独立 SaaS 创始人", "parent": "indie_dev",
+      "axes": { "occupation": "独立开发", "budget": "<¥300/月", "workflow_stage": "获客/计费/客服" },
+      "reachability": 0.9, "monetizability_prior": 0.75,
+      "evidence_topics": ["saas", "stripe", "订阅", "获客", "客服"],
+      "last_mined_on": "1970-01-01", "children": []
+    },
+    {
+      "id": "indie_dev.tooling", "label": "开发者工具作者", "parent": "indie_dev",
+      "axes": { "occupation": "独立开发", "budget": "低", "workflow_stage": "构建/分发" },
+      "reachability": 0.85, "monetizability_prior": 0.5,
+      "evidence_topics": ["开发者工具", "cli", "插件", "开源"],
+      "last_mined_on": "1970-01-01", "children": []
+    },
+    {
+      "id": "content_creator", "label": "内容创作者", "parent": null,
+      "axes": { "occupation": "自媒体", "budget": "中", "workflow_stage": "选题/制作/变现" },
+      "reachability": 0.6, "monetizability_prior": 0.6,
+      "evidence_topics": ["自媒体", "短视频", "小红书", "选题", "变现"],
+      "last_mined_on": "1970-01-01", "children": ["content_creator.shortvideo"]
+    },
+    {
+      "id": "content_creator.shortvideo", "label": "短视频博主", "parent": "content_creator",
+      "axes": { "occupation": "自媒体", "budget": "中", "workflow_stage": "脚本/剪辑/投流" },
+      "reachability": 0.55, "monetizability_prior": 0.55,
+      "evidence_topics": ["短视频", "剪辑", "抖音", "投流"],
+      "last_mined_on": "1970-01-01", "children": []
+    },
+    {
+      "id": "smb_owner", "label": "小微商家", "parent": null,
+      "axes": { "occupation": "实体/电商", "budget": "中", "workflow_stage": "经营/营销/客户" },
+      "reachability": 0.4, "monetizability_prior": 0.8,
+      "evidence_topics": ["小微商家", "门店", "私域", "电商", "跨境"],
+      "last_mined_on": "1970-01-01", "children": ["smb_owner.crossborder"]
+    },
+    {
+      "id": "smb_owner.crossborder", "label": "跨境电商卖家", "parent": "smb_owner",
+      "axes": { "occupation": "跨境电商", "budget": "中高", "workflow_stage": "选品/上架/合规" },
+      "reachability": 0.45, "monetizability_prior": 0.8,
+      "evidence_topics": ["跨境", "亚马逊", "选品", "合规", "物流"],
+      "last_mined_on": "1970-01-01", "children": []
+    },
+    {
+      "id": "solo_investor", "label": "独立投资人", "parent": null,
+      "axes": { "occupation": "投资", "budget": "高", "workflow_stage": "看项目/尽调/投后" },
+      "reachability": 0.7, "monetizability_prior": 0.7,
+      "evidence_topics": ["投资", "deal flow", "尽调", "投后"],
+      "last_mined_on": "1970-01-01", "children": []
+    }
+  ]
+}

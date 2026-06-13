@@ -14,8 +14,32 @@ from datetime import date
 from pathlib import Path
 
 from idea_core.llm import LLMBackend, get_backend, load_step_config
+from idea_core.state import SeenStore, SignalHistory
+from idea_core.trends import classify
 
 from . import collect, dedup, export, generate, normalize, ranks
+
+
+def _dynamic_dedup_and_trends(signals, state_dir: Path, today: date):
+    """动态模式:SeenStore 跨日去重 + SignalHistory 趋势,把 trend_status/growth_speed 回填到信号。"""
+    today_iso = today.isoformat()
+    seen = SeenStore.load(state_dir / "seen.jsonl")
+    hist = SignalHistory.load(state_dir / "signal_history.jsonl")
+
+    # 历史记录所有信号的话题(含已见过的,以追踪持续升温);只保留"新"信号
+    for s in signals:
+        hist.add(s.topic, s.observed_on or today_iso)
+    fresh = [s for s in signals if seen.observe(s.dedup_key, today_iso)]
+    # 批内再做一次词法近重去重
+    fresh, _dropped = dedup.dedupe_signals(fresh)
+    # 趋势分类 → 回填
+    for s in fresh:
+        status, speed = classify(hist.series(s.topic, window=30, end=today_iso))
+        s.trend_status, s.growth_speed = status, speed
+
+    seen.save()
+    hist.save()
+    return fresh
 
 
 def _llm_backend(name: str, step: str, today: date, job_dir: str | Path) -> LLMBackend:
@@ -49,21 +73,28 @@ def run_pipeline(
     gen_backend: str = "rule",
     llm: LLMBackend | None = None,
     job_dir: str | Path = "data/llm_jobs",
+    live: bool = False,
+    use_state: bool = False,
 ) -> PipelineResult:
     """Run the generation pipeline.
 
     ``gen_backend``: ``"rule"`` (offline default, zero token) or an LLM backend
-    name (``"router"`` Tencent / ``"cc"`` manual handoff / ``"mock"``). When it is
-    an LLM backend, generation goes through ``config/llm/generate.json``.
+    name (``"router"`` Tencent / ``"cc"`` manual handoff / ``"mock"``).
+    ``live``: 允许联网型适配器抓取（默认离线）。
+    ``use_state``: 启用持久状态（SeenStore 跨日去重 + SignalHistory 趋势）—— 这是"动态"
+    模式;默认 False 保持 demo 幂等(同输入两次结果相同)。
     """
     data_dir = Path(data_dir)
     output_dir = Path(output_dir)
     today = today or date.today()
 
-    # 1. collect (offline) -> 2. normalize -> 3. dedup
-    raw = collect.collect_all(data_dir, sources=sources)
+    # 1. collect -> 2. normalize -> 3. dedup (+ 动态状态/趋势)
+    raw = collect.collect_all(data_dir, sources=sources, live=live)
     signals = normalize.normalize(raw)
-    kept, _dropped = dedup.dedupe_signals(signals, seen_keys=seen_keys)
+    if use_state:
+        kept = _dynamic_dedup_and_trends(signals, data_dir / "state", today)
+    else:
+        kept, _dropped = dedup.dedupe_signals(signals, seen_keys=seen_keys)
 
     # 4. generate (over-generate) -> 5. score -> rank
     if gen_backend == "rule":

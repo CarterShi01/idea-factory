@@ -22,7 +22,8 @@ from idea_core.models import (
 )
 
 _DEFAULT_DATE = "1970-01-01"
-_WORD_RE = re.compile(r"[a-z0-9]+")
+# 英文按词、中文(CJK)按单字切分 —— 让中文信号也能得到有区分度的指纹/近重判断。
+_WORD_RE = re.compile(r"[a-z0-9]+|[一-鿿]")
 _STOPWORDS = {
     "the", "a", "an", "and", "or", "of", "to", "for", "in", "on", "with",
     "is", "are", "be", "that", "this", "it", "as", "by", "at", "from",
@@ -68,7 +69,9 @@ def normalize_record(raw: dict) -> Signal:
     pain = _pain_statement(raw)
     fingerprint = pain or title or raw_text
 
+    topic = (raw.get("category") or "").strip() or (raw.get("source_name") or source)
     return Signal(
+        topic=topic,
         id=_stable_id(source_name, title, url),
         source=source,
         source_name=source_name,

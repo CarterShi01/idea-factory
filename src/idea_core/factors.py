@@ -81,10 +81,21 @@ def _count_hits(text: str, vocab: set[str]) -> int:
 
 # --- factors --------------------------------------------------------------
 
+_TREND_BONUS = {"rising": 0.3, "steady": 0.0, "peaked": -0.2}
+
+
 def market_freshness(c: IdeaCandidate) -> float:
-    """Is the idea riding a currently-fresh topic? Higher = fresher."""
-    hits = _count_hits(c.text(), _TRENDING)
-    return min(1.0, 0.1 + hits / 2.0)
+    """Is the idea riding a currently-fresh topic? Higher = fresher.
+
+    Keyword heuristic ⊕ real trend signal: when the candidate carries a
+    ``trend_status`` / ``growth_speed`` (dynamic mode), fold them in; otherwise
+    (offline default) it degrades to the pure keyword score. Pure function either
+    way, so gen and eval still compute the same factor.
+    """
+    kw = min(1.0, 0.1 + _count_hits(c.text(), _TRENDING) / 2.0)
+    bonus = _TREND_BONUS.get(getattr(c, "trend_status", "steady"), 0.0)
+    bonus += 0.2 * getattr(c, "growth_speed", 0.0)
+    return max(0.0, min(1.0, kw + bonus))
 
 
 def pain_intensity(c: IdeaCandidate) -> float:

@@ -43,6 +43,9 @@ class Signal:
     url: str | None = None
     category: str | None = None
     confidence: str = CONFIDENCE_REAL
+    topic: str = ""               # 趋势检测的话题 key（normalize 设；通常=category）
+    trend_status: str = "steady"  # rising / steady / peaked（动态模式由 trends 回填）
+    growth_speed: float = 0.0     # 0-1，话题上升速度（动态模式）
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -62,6 +65,8 @@ class IdeaCandidate:
     observed_on: str
     confidence: str = CONFIDENCE_REAL
     category: str | None = None
+    trend_status: str = "steady"  # 从来源 Signal 透传，供 market_freshness 因子使用
+    growth_speed: float = 0.0
 
     def text(self) -> str:
         """Concatenated lowercase text, used by factors and dedup."""

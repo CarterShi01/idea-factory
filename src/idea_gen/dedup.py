@@ -17,7 +17,8 @@ import re
 
 from idea_core.models import Signal
 
-_WORD_RE = re.compile(r"[a-z0-9]+")
+# 英文按词、中文(CJK)按单字切分 —— 中文近重判断才有意义。
+_WORD_RE = re.compile(r"[a-z0-9]+|[一-鿿]")
 
 
 def _token_set(text: str) -> set[str]:

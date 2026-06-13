@@ -62,6 +62,8 @@ def _rule_based_backend(signal: Signal) -> list[IdeaCandidate]:
                 observed_on=signal.observed_on,
                 confidence=signal.confidence,
                 category=signal.category,
+                trend_status=signal.trend_status,
+                growth_speed=signal.growth_speed,
             )
         )
     return candidates
@@ -128,6 +130,8 @@ def _candidates_from_response(signal: Signal, data: dict | None) -> list[IdeaCan
                 observed_on=signal.observed_on,
                 confidence=signal.confidence,
                 category=signal.category,
+                trend_status=signal.trend_status,
+                growth_speed=signal.growth_speed,
             )
         )
     return out
