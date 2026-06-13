@@ -22,12 +22,8 @@ response pack. Then the pipeline resumes.
 
 ## Hard rules
 
-- **Do the core reasoning yourself, in this session — that is the whole point.**
-  Producing the generate/judge answers here is what uses the Max pool. The one
-  thing to avoid: **don't route the core call back through idea-factory's
-  `router` backend** (Tencent `router_chat` / `--backend router` / the
-  `IDEA_LLM_*` endpoint). If you were going to do that, you'd just run
-  `--*-backend router` and skip this skill entirely.
+- **Do the generate/judge reasoning yourself, in this session.** Your own
+  judgment here is what fulfills the batch — that's the point of this mode.
 - **Tools are allowed and encouraged when they help.** Use your normal CC tools
   (Read / Write / Bash), and other APIs or MCP servers if they genuinely improve
   an answer (look something up, fetch context). Using tools is still you doing

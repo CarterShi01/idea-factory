@@ -78,8 +78,11 @@ idea-eval --judge-backend router
 
 Backends: `rule`/`none` (offline default) · `router` (Tencent) · `mock` (tests) ·
 `cc` (manual Claude Code handoff). Prompts + JSON schemas live in
-`config/llm/{generate,judge}.json`. Set the endpoint via env
-(`IDEA_LLM_BASE_URL` / `IDEA_LLM_API_KEY` / `IDEA_LLM_MODEL`).
+`config/llm/{generate,judge}.json`. Configure the endpoint via env
+`IDEA_LLM_BASE_URL` / `IDEA_LLM_API_KEY` / `IDEA_LLM_MODEL` — these fall back to
+the standard `OPENAI_BASE_URL` / `OPENAI_API_KEY` / `OPENAI_MODEL`, so an ambient
+OpenAI-compatible endpoint works out of the box. (`base_url` must include the
+version path, e.g. `.../v1`.)
 
 ### CC handoff mode (`--*-backend cc`) — no programmatic Claude Code
 

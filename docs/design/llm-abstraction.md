@@ -178,11 +178,13 @@ idea_eval:
 | 配置项（env） | 默认 | 说明 |
 |---|---|---|
 | `IDEA_LLM_BACKEND` | `mock` | `mock` / `router` / `cc` |
-| `IDEA_LLM_BASE_URL` | `http://cli-proxy-api:8317` | one-creator 的 router；或直连 `https://api.lkeap.cloud.tencent.com/plan/v3` |
-| `IDEA_LLM_API_KEY` | `local-router-key` | 经 router 时是占位 key；直连时填真实 LKEAP key（**只放 env / gitignored，不进 git**） |
-| `IDEA_LLM_MODEL` | `tc-code` | 腾讯 LKEAP 的 `tc-code-latest` 别名 |
+| `IDEA_LLM_BASE_URL` | 回退 `OPENAI_BASE_URL`，再回退 `http://cli-proxy-api:8317/v1` | **须含版本段**（`.../v1` 或 `.../plan/v3`），代码只追加 `/chat/completions` |
+| `IDEA_LLM_API_KEY` | 回退 `OPENAI_API_KEY`，再回退 `local-router-key` | 真实 key **只放 env / gitignored，不进 git** |
+| `IDEA_LLM_MODEL` | 回退 `OPENAI_MODEL`，再回退 `tc-code` | 经 router 用别名 `tc-code`；直连 LKEAP 用其真实模型名 |
 
-**安全纪律（照搬 one-creator）**：真实 provider key 只放一处且 gitignored；调用方默认只持 `local-router-key`；提供"引擎守卫"硬拒 Anthropic 端点/claude* 模型，保证省 token 步永远走腾讯。
+`RouterBackend` 优先读 `IDEA_LLM_*`，未设则回退标准 `OPENAI_*`，所以环境里若已有 OpenAI 兼容端点（如腾讯 LKEAP）即开箱可用。
+
+**安全纪律（照搬 one-creator）**：真实 provider key 只放一处且 gitignored；提供"引擎守卫"硬拒 Anthropic 端点/claude* 模型，保证省 token 步永远走腾讯。
 **批处理注意**：腾讯 LKEAP 无原生 batch API，"批"靠在一个 prompt 里塞多条（一次评 N 条），由 `batch_size` 控制。
 
 ---

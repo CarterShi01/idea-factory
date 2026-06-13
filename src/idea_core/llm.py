@@ -150,9 +150,29 @@ class RouterBackend:
         model: str | None = None,
         timeout: int = 60,
     ):
-        self.base_url = (base_url or os.environ.get("IDEA_LLM_BASE_URL", "http://cli-proxy-api:8317")).rstrip("/")
-        self.api_key = api_key or os.environ.get("IDEA_LLM_API_KEY", "local-router-key")
-        self.model = model or os.environ.get("IDEA_LLM_MODEL", "tc-code")
+        # Prefer idea-factory's own env vars, then fall back to the standard
+        # OPENAI_* vars so an ambient OpenAI-compatible endpoint (e.g. Tencent
+        # LKEAP) works out of the box, then the local router default.
+        # base_url should include the version path (".../v1", ".../plan/v3", …),
+        # per the OpenAI convention; we append "/chat/completions".
+        self.base_url = (
+            base_url
+            or os.environ.get("IDEA_LLM_BASE_URL")
+            or os.environ.get("OPENAI_BASE_URL")
+            or "http://cli-proxy-api:8317/v1"
+        ).rstrip("/")
+        self.api_key = (
+            api_key
+            or os.environ.get("IDEA_LLM_API_KEY")
+            or os.environ.get("OPENAI_API_KEY")
+            or "local-router-key"
+        )
+        self.model = (
+            model
+            or os.environ.get("IDEA_LLM_MODEL")
+            or os.environ.get("OPENAI_MODEL")
+            or "tc-code"
+        )
         self.timeout = timeout
 
     def _guard(self, model: str) -> None:
@@ -162,7 +182,11 @@ class RouterBackend:
 
     def _chat(self, system: str, user: str, temperature: float, model: str) -> str:
         self._guard(model)
-        url = f"{self.base_url}/v1/chat/completions"
+        url = (
+            self.base_url
+            if self.base_url.endswith("/chat/completions")
+            else f"{self.base_url}/chat/completions"
+        )
         payload = {
             "model": model,
             "messages": [
