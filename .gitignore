@@ -17,5 +17,11 @@ venv/
 data/processed/*.json
 data/processed/*.md
 
+# LLM batch request/response packs (CC-handoff mode)
+data/llm_jobs/
+
+# Local secrets (real provider keys live only in env / .env, never in git)
+.env
+
 # ...but keep the directory and the committed sample inputs
 !data/processed/.gitkeep

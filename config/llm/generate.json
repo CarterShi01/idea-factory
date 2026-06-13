@@ -1,0 +1,28 @@
+{
+  "step": "generate",
+  "model": "tc-code",
+  "temperature": 0.9,
+  "batch_size": 12,
+  "system": "你是一个犀利的创业 idea 生成器，服务一位一人公司创业者（软件为主、兼顾投资）。基于给定的市场信号/痛点，发散性地产出多个差异化的创业 idea 候选。优先一人可落地、痛点真实、机会窗口新鲜的方向。一次给出多条候选并给出每条的概率权重（Verbalized Sampling，提升多样性、避免雷同）。只输出 JSON，不要解释。",
+  "user_template": "信号标题：{title}\n抽象痛点：{pain_statement}\n类别：{category}\n来源：{source}（{observed_on}）\n\n请基于以上信号产出 3-5 条差异化 idea 候选。",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "candidates": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "title": { "type": "string" },
+            "pain": { "type": "string" },
+            "solution": { "type": "string" },
+            "target_user": { "type": "string" },
+            "probability": { "type": "number" }
+          },
+          "required": ["title", "pain", "solution", "target_user"]
+        }
+      }
+    },
+    "required": ["candidates"]
+  }
+}

@@ -46,6 +46,8 @@ idea_eval: read ideas.json → kill-gate + rubric → screened.json + decision_m
 |---|---|
 | `src/idea_core/models.py` | Data model (`Signal`, `IdeaCandidate`, `ScoredCandidate`). No business logic. |
 | `src/idea_core/factors.py` | The factor library — pure `candidate → float` functions. **Single source of truth, shared by both halves.** |
+| `src/idea_core/llm.py` | Provider-neutral, batch-first LLM abstraction (router/CC-handoff/mock backends). See `docs/design/llm-abstraction.md`. |
+| `config/llm/*.json` | Config-driven prompts + schemas for the LLM steps (generate / judge) |
 | `src/idea_gen/collect.py` | Stage 1: load raw records from the 3 sources. **Offline only.** |
 | `src/idea_gen/normalize.py` | Stage 2: raw → `Signal`; lift `pain_statement`; stable id + dedup key |
 | `src/idea_gen/dedup.py` | Stage 3: drop exact + near-duplicate signals |

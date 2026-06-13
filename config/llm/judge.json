@@ -1,0 +1,29 @@
+{
+  "step": "judge",
+  "model": "tc-code",
+  "temperature": 0.1,
+  "batch_size": 20,
+  "system": "你是一位冷酷、经验丰富的早期创业评审，像投资人筛 deal flow 一样高效说不。你的第一职责不是找出神 idea，而是用对抗式批判快速淘汰看着不错但有硬伤的候选。对每条 idea 给出多维评分(0-1)、verdict(pursue/review/kill)、最致命的一条质疑、以及一个 ≤2 周/≤$100 可证伪的最小实验。任一致命短板应导致 kill。只输出 JSON，不要解释。",
+  "user_template": "标题：{title}\n痛点：{pain}\n方案：{solution}\n目标用户：{target_user}\n生成侧因子分：{factors}\n来源置信度：{confidence}\n\n请评估这条 idea。",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "verdict": { "type": "string", "enum": ["pursue", "review", "kill"] },
+      "score": { "type": "number" },
+      "scores": {
+        "type": "object",
+        "properties": {
+          "pain_real": { "type": "number" },
+          "solo_buildable": { "type": "number" },
+          "reachable": { "type": "number" },
+          "defensible": { "type": "number" },
+          "timing": { "type": "number" }
+        }
+      },
+      "killer_objection": { "type": "string" },
+      "riskiest_assumption": { "type": "string" },
+      "cheap_experiment": { "type": "string" }
+    },
+    "required": ["verdict", "score", "killer_objection", "cheap_experiment"]
+  }
+}
