@@ -23,5 +23,13 @@ data/llm_jobs/
 # Local secrets (real provider keys live only in env / .env, never in git)
 .env
 
+# Studio web build artifacts
+studio/web/node_modules/
+studio/web/dist/
+studio/web/*.tsbuildinfo
+studio/web/vite.config.js
+studio/web/vite.config.d.ts
+
+
 # ...but keep the directory and the committed sample inputs
 !data/processed/.gitkeep

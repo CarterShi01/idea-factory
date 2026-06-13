@@ -1,0 +1,24 @@
+# systemd unit for the Idea Factory Studio backend.
+# Install:
+#   sudo cp studio/deploy/idea-factory-studio.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now idea-factory-studio
+# Requires STUDIO_PASSWORD (and IDEA_LLM_* for live runs) in the EnvironmentFile.
+
+[Unit]
+Description=Idea Factory Studio (control panel)
+After=network.target
+
+[Service]
+Type=simple
+User=claude-user
+WorkingDirectory=/home/claude-user/workspace/idea-factory
+EnvironmentFile=/home/claude-user/workspace/idea-factory/.env
+Environment=STUDIO_HOST=127.0.0.1
+Environment=STUDIO_PORT=3010
+ExecStart=/usr/bin/python3 studio/server/app.py
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
