@@ -51,6 +51,14 @@ def write_memos(
             "",
             f"- **结论**：{_VERDICT_ZH.get(e.verdict, e.verdict)} · 得分 {e.eval_score:.0f}/100{synthetic}{judged}",
         ]
+        if e.critique:
+            lines.append("- **对抗式批判**：")
+            for obj in e.critique:
+                lines.append(f"  - {obj}")
+            if e.doomed_assumption:
+                lines.append(f"  - *若被证伪即垮的假设*：{e.doomed_assumption}")
+        if e.judge_rebuttal:
+            lines.append(f"- **评委回应**：{e.judge_rebuttal}")
         if e.killer_objection:
             lines.append(f"- **最致命质疑**：{e.killer_objection}")
         lines += [

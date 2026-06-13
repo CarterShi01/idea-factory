@@ -9,7 +9,7 @@ from datetime import date
 import pytest
 
 from idea_core.llm import LLMResponse, MockBackend, PendingHandoff
-from idea_eval.evaluate import KILL, PURSUE, evaluate_all, judge_survivors
+from idea_eval.evaluate import KILL, PURSUE, critique_survivors, evaluate_all, judge_survivors
 from idea_eval.pipeline import run_evaluation
 from idea_gen.generate import generate_llm
 from idea_gen.normalize import normalize_record
@@ -137,6 +137,155 @@ def test_eval_pipeline_with_judge_backend(tmp_path):
         llm=MockBackend(responder),
     )
     assert any(e.judged_by == "llm" for e in res.evaluations)
+
+
+# --- B-prep: devil's advocate critique ----------------------------------
+
+
+def test_critique_populates_evaluation_fields():
+    ideas = [_high_factor_idea()]
+    evals = evaluate_all(ideas)
+
+    def responder(req):
+        return LLMResponse(
+            id=req.id,
+            data={
+                "objections": ["no real wedge", "TAM is tiny", "no distribution"],
+                "killer_objection": "no real wedge",
+                "doomed_assumption": "founders will pay for this at all",
+            },
+        )
+
+    out = critique_survivors(evals, {"i1": ideas[0]}, MockBackend(responder), {"user_template": "{title}"})
+    e = out[0]
+    assert e.critique == ["no real wedge", "TAM is tiny", "no distribution"]
+    assert e.critique_killer == "no real wedge"
+    assert e.doomed_assumption == "founders will pay for this at all"
+
+
+def test_judge_sees_critique_in_user_prompt_and_records_rebuttal():
+    """End-to-end critique → judge: judge prompt must receive the critique block,
+    and the judge's rebuttal must land on the Evaluation."""
+    ideas = [_high_factor_idea()]
+    evals = evaluate_all(ideas)
+
+    def critique_responder(req):
+        return LLMResponse(
+            id=req.id,
+            data={
+                "objections": ["uniqueness-token-XYZ-from-critique"],
+                "killer_objection": "uniqueness-token-XYZ-from-critique",
+                "doomed_assumption": "founders pay",
+            },
+        )
+
+    critique_survivors(evals, {"i1": ideas[0]}, MockBackend(critique_responder), {"user_template": "{title}"})
+
+    seen_user_prompts: list[str] = []
+
+    def judge_responder(req):
+        seen_user_prompts.append(req.user)
+        return LLMResponse(
+            id=req.id,
+            data={
+                "verdict": "review",
+                "score": 55,
+                "respond_to_critique": "驳回 uniqueness 反驳——我们有 X 切入点",
+                "killer_objection": "distribution",
+                "cheap_experiment": "landing page",
+            },
+        )
+
+    # use the actual judge template so the {critique} placeholder is exercised
+    judge_template = "标题：{title}\n反驳：\n{critique}\n请评估。"
+    out = judge_survivors(evals, {"i1": ideas[0]}, MockBackend(judge_responder), {"user_template": judge_template})
+
+    assert any("uniqueness-token-XYZ-from-critique" in p for p in seen_user_prompts), (
+        "judge prompt must include the critique block"
+    )
+    e = out[0]
+    assert e.judge_rebuttal.startswith("驳回")
+    assert e.judged_by == "llm"
+
+
+def test_pipeline_runs_critique_then_judge(tmp_path):
+    """The pipeline should call critique first, then judge — verify by counting hits."""
+    from idea_gen.pipeline import run_pipeline
+
+    gen = run_pipeline(data_dir="data", output_dir=tmp_path, today=REF_DATE)
+
+    critique_calls = {"n": 0}
+    judge_calls = {"n": 0}
+
+    def critique_responder(req):
+        critique_calls["n"] += 1
+        return LLMResponse(
+            id=req.id,
+            data={"objections": ["weak"], "killer_objection": "weak", "doomed_assumption": "x"},
+        )
+
+    def judge_responder(req):
+        judge_calls["n"] += 1
+        return LLMResponse(
+            id=req.id,
+            data={
+                "verdict": "review",
+                "score": 50,
+                "respond_to_critique": "ack",
+                "killer_objection": "weak",
+                "cheap_experiment": "t",
+            },
+        )
+
+    res = run_evaluation(
+        input_path=gen.json_path,
+        output_dir=tmp_path,
+        today=REF_DATE,
+        judge_backend="mock",
+        critique=True,
+        llm=MockBackend(judge_responder),
+        critique_llm=MockBackend(critique_responder),
+    )
+    n_survivors = sum(1 for e in res.evaluations if e.verdict in ("pursue", "review"))
+    assert critique_calls["n"] == n_survivors
+    assert judge_calls["n"] == n_survivors
+    assert any(e.critique for e in res.evaluations)
+    assert any(e.judge_rebuttal == "ack" for e in res.evaluations)
+
+
+def test_pipeline_skips_critique_when_disabled(tmp_path):
+    from idea_gen.pipeline import run_pipeline
+
+    gen = run_pipeline(data_dir="data", output_dir=tmp_path, today=REF_DATE)
+
+    critique_calls = {"n": 0}
+
+    def critique_responder(req):
+        critique_calls["n"] += 1
+        return LLMResponse(id=req.id, data={"objections": []})
+
+    def judge_responder(req):
+        return LLMResponse(
+            id=req.id,
+            data={
+                "verdict": "review",
+                "score": 50,
+                "respond_to_critique": "",
+                "killer_objection": "x",
+                "cheap_experiment": "y",
+            },
+        )
+
+    run_evaluation(
+        input_path=gen.json_path,
+        output_dir=tmp_path,
+        today=REF_DATE,
+        judge_backend="mock",
+        critique=False,
+        llm=MockBackend(judge_responder),
+        critique_llm=MockBackend(critique_responder),
+    )
+    assert critique_calls["n"] == 0
 
 
 # --- CC handoff (manual mode) raises, never calls CC ----------------------

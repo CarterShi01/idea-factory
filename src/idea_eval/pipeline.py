@@ -19,10 +19,14 @@ from . import evaluate, export
 from .evaluate import KILL, PURSUE, REVIEW
 
 
-def _llm_backend(name: str, today: date, job_dir: str | Path) -> LLMBackend:
-    """Build an LLM backend; CC-handoff gets a dated job name for its file pack."""
+def _llm_backend(name: str, today: date, job_dir: str | Path, step: str = "judge") -> LLMBackend:
+    """Build an LLM backend; CC-handoff gets a dated, step-scoped job name.
+
+    ``step`` separates the critique pack from the judge pack so a CC-handoff run
+    becomes two distinct manual fulfilments (critique-<date>, then judge-<date>).
+    """
     if name == "cc":
-        return get_backend("cc", job_dir=job_dir, job_name=f"judge-{today.isoformat()}")
+        return get_backend("cc", job_dir=job_dir, job_name=f"{step}-{today.isoformat()}")
     return get_backend(name)
 
 
@@ -44,7 +48,9 @@ def run_evaluation(
     floor: float = evaluate.DEFAULT_FLOOR,
     top_n: int = 20,
     judge_backend: str = "none",
+    critique: bool = True,
     llm: LLMBackend | None = None,
+    critique_llm: LLMBackend | None = None,
     job_dir: str | Path = "data/llm_jobs",
 ) -> EvalResult:
     """Screen idea_gen's candidates.
@@ -53,6 +59,15 @@ def run_evaluation(
     LLM backend name (``"router"`` / ``"cc"`` / ``"mock"``). When set, the rule
     kill-gate runs first and the LLM judge (B) only sees the survivors (Top-K),
     using ``config/llm/judge.json``.
+
+    ``critique``: when True (default) and ``judge_backend != "none"``, runs an
+    adversarial devil's advocate pass over the rule-survivors *before* the judge,
+    using ``config/llm/critique.json``. The critique output is injected into the
+    judge prompt; the judge must respond to it (anti-self-enhancement). Disable
+    with False to skip critique (token-thrifty or for calibration A/B).
+
+    ``llm`` / ``critique_llm``: optional pre-built backends (test seam). When
+    only ``llm`` is given, it is also used for critique.
     """
     input_path = Path(input_path)
     output_dir = Path(output_dir)
@@ -62,10 +77,17 @@ def run_evaluation(
     evaluations = evaluate.evaluate_all(ideas, floor=floor)
 
     if judge_backend != "none":
-        backend = llm or _llm_backend(judge_backend, today, job_dir)
         ideas_by_id = {i.get("id", ""): i for i in ideas}
+        if critique:
+            crit_backend = critique_llm or llm or _llm_backend(
+                judge_backend, today, job_dir, step="critique"
+            )
+            evaluate.critique_survivors(
+                evaluations, ideas_by_id, crit_backend, load_step_config("critique")
+            )
+        judge_be = llm or _llm_backend(judge_backend, today, job_dir, step="judge")
         evaluations = evaluate.judge_survivors(
-            evaluations, ideas_by_id, backend, load_step_config("judge")
+            evaluations, ideas_by_id, judge_be, load_step_config("judge")
         )
 
     json_path = output_dir / "screened.json"

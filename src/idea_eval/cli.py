@@ -33,6 +33,13 @@ def build_parser() -> argparse.ArgumentParser:
         default="none",
         help="LLM-as-judge over kill-gate survivors: none (rule-only, default) / router (Tencent) / cc / mock",
     )
+    parser.add_argument(
+        "--no-critique",
+        dest="critique",
+        action="store_false",
+        default=True,
+        help="skip the devil's advocate pass before the judge (default: on when --judge-backend != none)",
+    )
     return parser
 
 
@@ -40,10 +47,11 @@ def _report_handoff(ph: PendingHandoff) -> int:
     response_path = ph.request_path.parent / ph.request_path.name.replace(
         ".request.jsonl", ".response.jsonl"
     )
-    print("\n⏸  Judge step paused for a manual Claude Code session (Max pool — no programmatic CC).")
+    step = "Critique" if ph.request_path.name.startswith("critique-") else "Judge"
+    print(f"\n⏸  {step} step paused for a manual Claude Code session (Max pool — no programmatic CC).")
     print(f"   request pack: {ph.request_path}  ({ph.count} survivors)")
     print("   1) open Claude Code by hand in this repo")
-    print(f"   2) judge the whole batch, writing responses to {response_path}")
+    print(f"   2) {step.lower()} the whole batch, writing responses to {response_path}")
     print("   3) re-run this command to resume.")
     return 2
 
@@ -61,6 +69,7 @@ def main(argv: list[str] | None = None) -> int:
             floor=args.floor,
             top_n=args.top_n,
             judge_backend=args.judge_backend,
+            critique=args.critique,
         )
     except PendingHandoff as ph:
         return _report_handoff(ph)

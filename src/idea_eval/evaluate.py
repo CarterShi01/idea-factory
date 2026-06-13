@@ -79,8 +79,15 @@ class Evaluation:
     risk_flags: list[str] = field(default_factory=list)
     confidence: str = "real"
     factors: dict[str, float] = field(default_factory=dict)
-    killer_objection: str = ""  # filled by the LLM judge (B)
+    # B-step (LLM-as-judge) outputs
+    killer_objection: str = ""
     judged_by: str = "rule"     # "rule" or "llm"
+    # B-prep: devil's advocate critique (runs before the judge, separate prompt/call)
+    critique: list[str] = field(default_factory=list)
+    critique_killer: str = ""
+    doomed_assumption: str = ""
+    # B output: how the judge responded to the critique (anti-self-enhancement)
+    judge_rebuttal: str = ""
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -154,7 +161,76 @@ def evaluate_all(ideas: list[dict], floor: float = DEFAULT_FLOOR) -> list[Evalua
     return _sort([evaluate_idea(i, floor=floor) for i in ideas])
 
 
+# --- B-prep: devil's advocate critique -----------------------------------
+
+
+def _survivor_fields(e: Evaluation, idea: dict) -> dict:
+    return {
+        "title": e.title,
+        "pain": idea.get("pain", ""),
+        "solution": idea.get("solution", ""),
+        "target_user": idea.get("target_user", ""),
+        "factors": json.dumps(e.factors, ensure_ascii=False),
+        "confidence": e.confidence,
+    }
+
+
+def critique_survivors(
+    evaluations: list[Evaluation],
+    ideas_by_id: dict[str, dict],
+    llm,
+    config: dict,
+) -> list[Evaluation]:
+    """Run an adversarial 'devil's advocate' pass over the rule-gate survivors.
+
+    Pure attack: lists 3-5 concrete objections + a killer_objection + a
+    doomed_assumption, with no scoring or final verdict. Output is then fed into
+    ``judge_survivors`` so the judge has to engage with the strongest objections
+    rather than rubber-stamp the generator's output (anti-self-enhancement).
+
+    Mutates ``evaluations`` in place (no re-sort — verdicts unchanged here).
+    May raise ``idea_core.llm.PendingHandoff`` (CC-handoff mode); let it propagate.
+    """
+    from idea_core.llm import build_request, render_template
+
+    survivors = [e for e in evaluations if e.verdict in (PURSUE, REVIEW)]
+    if not survivors:
+        return evaluations
+
+    template = config.get("user_template", "")
+    requests = []
+    for e in survivors:
+        idea = ideas_by_id.get(e.idea_id, {})
+        user = render_template(template, _survivor_fields(e, idea))
+        requests.append(build_request(e.idea_id, user, config))
+
+    responses = {r.id: r for r in llm.complete(requests)}
+    for e in survivors:
+        r = responses.get(e.idea_id)
+        if not (r and r.ok and r.data):
+            continue
+        d = r.data
+        objs = d.get("objections")
+        if isinstance(objs, list):
+            e.critique = [str(o) for o in objs if o]
+        e.critique_killer = d.get("killer_objection", "") or e.critique_killer
+        e.doomed_assumption = d.get("doomed_assumption", "") or e.doomed_assumption
+
+    return evaluations
+
+
 # --- B: LLM-as-judge -----------------------------------------------------
+
+
+def _critique_block(e: Evaluation) -> str:
+    if not e.critique and not e.critique_killer:
+        return "（无对抗式批判 — 直接评估）"
+    lines = [f"- {o}" for o in e.critique]
+    if e.critique_killer:
+        lines.append(f"最致命：{e.critique_killer}")
+    if e.doomed_assumption:
+        lines.append(f"若被证伪即垮的假设：{e.doomed_assumption}")
+    return "\n".join(lines)
 
 
 def judge_survivors(
@@ -169,6 +245,10 @@ def judge_survivors(
     sees pursue/review candidates, where adversarial judgment actually pays off.
     It may downgrade a survivor to ``kill``. Mutates and re-sorts ``evaluations``.
 
+    If ``critique_survivors`` ran first and populated ``e.critique``, the judge
+    user prompt injects it via the ``{critique}`` placeholder and the judge must
+    fill ``respond_to_critique`` — forcing engagement with the strongest objection.
+
     May raise ``idea_core.llm.PendingHandoff`` (CC-handoff mode); let it propagate.
     """
     from idea_core.llm import build_request, render_template
@@ -181,14 +261,8 @@ def judge_survivors(
     requests = []
     for e in survivors:
         idea = ideas_by_id.get(e.idea_id, {})
-        fields = {
-            "title": e.title,
-            "pain": idea.get("pain", ""),
-            "solution": idea.get("solution", ""),
-            "target_user": idea.get("target_user", ""),
-            "factors": json.dumps(e.factors, ensure_ascii=False),
-            "confidence": e.confidence,
-        }
+        fields = _survivor_fields(e, idea)
+        fields["critique"] = _critique_block(e)
         requests.append(build_request(e.idea_id, render_template(template, fields), config))
 
     responses = {r.id: r for r in llm.complete(requests)}
@@ -205,5 +279,6 @@ def judge_survivors(
         e.killer_objection = d.get("killer_objection", "") or e.killer_objection
         e.riskiest_assumption = d.get("riskiest_assumption", "") or e.riskiest_assumption
         e.cheap_experiment = d.get("cheap_experiment", "") or e.cheap_experiment
+        e.judge_rebuttal = d.get("respond_to_critique", "") or e.judge_rebuttal
 
     return _sort(evaluations)
