@@ -7,7 +7,7 @@ from __future__ import annotations
 import argparse
 from datetime import date
 
-from idea_core.llm import PendingHandoff
+from idea_core.llm import PendingHandoff, load_dotenv
 from idea_core.models import SOURCE_BRAIN, SOURCE_EXTERNAL, SOURCE_PERSONA
 
 from .pipeline import run_pipeline
@@ -45,6 +45,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    load_dotenv()
     args = build_parser().parse_args(argv)
     today = date.fromisoformat(args.date) if args.date else date.today()
 

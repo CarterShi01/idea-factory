@@ -22,10 +22,27 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
 import urllib.request
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Callable, Protocol, runtime_checkable
+
+
+def load_dotenv(path: str | Path = ".env") -> None:
+    """Minimal stdlib .env loader: KEY=VALUE lines, does not override existing env.
+
+    Lets the CLIs pick up credentials from a gitignored .env without a dependency.
+    """
+    p = Path(path)
+    if not p.exists():
+        return
+    for line in p.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
 
 # --- L2: the unchanging contract -----------------------------------------
 
@@ -174,6 +191,8 @@ class RouterBackend:
             or "tc-code"
         )
         self.timeout = timeout
+        # Minimum gap between sequential calls — LKEAP rate-limits bursts with 400s.
+        self.min_interval = float(os.environ.get("IDEA_LLM_MIN_INTERVAL", "1.0"))
 
     def _guard(self, model: str) -> None:
         low = (model or "").lower()
@@ -206,16 +225,26 @@ class RouterBackend:
             data = json.loads(resp.read().decode("utf-8"))
         return data["choices"][0]["message"]["content"]
 
-    def complete(self, requests: list[LLMRequest]) -> list[LLMResponse]:
+    def complete(self, requests: list[LLMRequest], retries: int = 2) -> list[LLMResponse]:
         out: list[LLMResponse] = []
-        for r in requests:
+        for i, r in enumerate(requests):
+            if i:
+                time.sleep(self.min_interval)  # throttle to respect the rate limit
             model = r.model or self.model
-            try:
-                text = self._chat(r.system, r.user, r.temperature, model)
-                data = extract_json(text) if r.schema else None
-                out.append(LLMResponse(id=r.id, text=text, data=data, ok=True))
-            except Exception as exc:  # noqa: BLE001 -- one bad call shouldn't kill the batch
-                out.append(LLMResponse(id=r.id, ok=False, error=f"{type(exc).__name__}: {exc}"))
+            last = ""
+            for attempt in range(retries + 1):
+                try:
+                    text = self._chat(r.system, r.user, r.temperature, model)
+                    data = extract_json(text) if r.schema else None
+                    out.append(LLMResponse(id=r.id, text=text, data=data, ok=True))
+                    last = ""
+                    break
+                except Exception as exc:  # noqa: BLE001 -- one bad call shouldn't kill the batch
+                    last = f"{type(exc).__name__}: {exc}"
+                    if attempt < retries:
+                        time.sleep(self.min_interval * (attempt + 1))  # backoff for transient 4xx / rate limits
+            else:
+                out.append(LLMResponse(id=r.id, ok=False, error=last))
         return out
 
 

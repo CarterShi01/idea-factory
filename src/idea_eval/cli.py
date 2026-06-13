@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 from datetime import date
 
-from idea_core.llm import PendingHandoff
+from idea_core.llm import PendingHandoff, load_dotenv
 
 from .evaluate import DEFAULT_FLOOR
 from .pipeline import run_evaluation
@@ -49,6 +49,7 @@ def _report_handoff(ph: PendingHandoff) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    load_dotenv()
     args = build_parser().parse_args(argv)
     today = date.fromisoformat(args.date) if args.date else date.today()
 

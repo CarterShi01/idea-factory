@@ -89,12 +89,30 @@ def _signal_fields(signal: Signal) -> dict:
     }
 
 
+def _first(item: dict, *keys: str) -> str:
+    for k in keys:
+        v = item.get(k)
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+    return ""
+
+
 def _candidates_from_response(signal: Signal, data: dict | None) -> list[IdeaCandidate]:
     if not data:
         return []
+    # Prefer the requested {"candidates": [...]} shape, but tolerate a model that
+    # returns a single idea object or a differently-keyed list.
+    items = data.get("candidates")
+    if not isinstance(items, list):
+        items = next((v for v in data.values() if isinstance(v, list)), None)
+    if not isinstance(items, list):
+        items = [data] if any(k in data for k in ("title", "idea", "idea_name", "name")) else []
+
     out: list[IdeaCandidate] = []
-    for idx, item in enumerate(data.get("candidates", [])):
-        title = (item.get("title") or "").strip()
+    for idx, item in enumerate(items):
+        if not isinstance(item, dict):
+            continue
+        title = _first(item, "title", "idea_name", "name", "idea")
         if not title:
             continue
         out.append(
@@ -103,9 +121,9 @@ def _candidates_from_response(signal: Signal, data: dict | None) -> list[IdeaCan
                 signal_id=signal.id,
                 source=signal.source,
                 title=title[:120],
-                pain=item.get("pain") or signal.pain_statement,
-                solution=item.get("solution", ""),
-                target_user=item.get("target_user", _DEFAULT_USER),
+                pain=_first(item, "pain", "problem", "pain_point") or signal.pain_statement,
+                solution=_first(item, "solution", "description", "one_sentence_description"),
+                target_user=_first(item, "target_user", "user", "audience") or _DEFAULT_USER,
                 observed_on=signal.observed_on,
                 confidence=signal.confidence,
                 category=signal.category,
