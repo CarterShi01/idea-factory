@@ -39,3 +39,19 @@ def test_pain_intensity_rewards_sharper_pain():
 def test_factors_are_pure():
     c = _candidate(pain="manual tedious work")
     assert compute_factors(c) == compute_factors(c)
+
+
+def test_chinese_content_scores_nonzero():
+    # A Chinese (LLM-generated style) candidate must score like its English peer,
+    # not collapse to zero — otherwise the eval kill-gate kills everything Chinese.
+    c = _candidate(
+        title="面向独立开发者的 AI 智能体",
+        pain="知识工作者浪费大量时间手动整理资料，效率低又繁琐",
+        solution="一个带专有工作流集成的自动化助手",
+        target_user="独立开发者与创始人",
+    )
+    scores = compute_factors(c)
+    assert scores["pain_intensity"] > 0.0      # 浪费/手动/低效/繁琐
+    assert scores["market_freshness"] > 0.1    # 智能体/自动化/助手
+    assert scores["distribution_fit"] > 0.1    # 开发者/创始人
+    assert all(0.0 <= v <= 1.0 for v in scores.values())

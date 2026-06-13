@@ -21,11 +21,18 @@ from .models import IdeaCandidate
 
 # --- keyword vocabularies -------------------------------------------------
 
+# The vocabularies are bilingual (EN + 中文). Matching is plain substring
+# containment, which works for Chinese (no word boundaries needed); the English
+# terms never match Chinese text and vice-versa, so adding 中文 terms is purely
+# additive and leaves English scoring unchanged.
+
 # Topics currently in a fresh / rising window.
 _TRENDING = {
     "ai", "agent", "agents", "llm", "rag", "copilot", "automation", "gpt",
     "embedding", "vector", "multimodal", "voice", "local-first", "privacy",
     "mcp", "fine-tune", "self-hosted",
+    "智能体", "大模型", "自动化", "多模态", "语音", "隐私", "本地", "私有化",
+    "向量", "检索增强", "微调", "副驾", "助手", "智能",
 }
 # Words that signal a real, sharp pain.
 _PAIN = {
@@ -33,28 +40,38 @@ _PAIN = {
     "frustrat", "waste", "wasting", "hate", "painful", "hard", "difficult",
     "confusing", "unreliable", "clunky", "hours", "repetitive", "missing",
     "lack", "struggle", "annoying", "overwhelm", "error-prone",
+    "昂贵", "手动", "手工", "繁琐", "低效", "浪费", "痛苦", "困难", "难以",
+    "缺乏", "缺少", "麻烦", "耗时", "重复", "易错", "痛点", "不便", "头疼",
+    "效率低", "花时间", "费时", "无法",
 }
 # Words that imply a heavy, non-solo build.
 _COMPLEXITY = {
     "marketplace", "hardware", "logistics", "enterprise", "compliance",
     "hipaa", "two-sided", "regulat", "blockchain", "on-premise", "fleet",
     "supply", "warehouse", "payroll",
+    "硬件", "物流", "企业级", "合规", "双边", "监管", "区块链", "私有部署",
+    "供应链", "仓储", "牌照", "线下",
 }
 # Hints of defensibility / moat.
 _MOAT = {
     "proprietary", "workflow", "integration", "dataset", "niche", "community",
     "network", "vertical", "domain", "fine-tune", "data",
+    "专有", "工作流", "集成", "数据集", "细分", "社区", "网络效应", "垂直",
+    "领域", "壁垒", "护城河", "私有数据",
 }
 # Hints of a crowded, undifferentiated space.
 _CROWDED = {
     "another", "clone", "generic", "chatbot", "todo", "to-do", "note",
     "url shortener", "crud", "wrapper",
+    "又一个", "克隆", "通用", "聊天机器人", "待办", "套壳", "山寨", "同质化",
 }
 # Users this particular founder (software, also investing) can actually reach.
 _REACHABLE = {
     "developer", "developers", "indie", "founder", "founders", "investor",
     "investors", "engineer", "engineers", "software", "startup", "saas",
     "builder", "builders", "analyst", "technical",
+    "开发者", "独立开发", "创始人", "投资人", "投资者", "工程师", "软件",
+    "初创", "程序员", "技术", "站长", "团队", "独立开发者",
 }
 
 
