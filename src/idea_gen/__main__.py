@@ -1,4 +1,4 @@
-"""Enable ``python -m idea_factory``."""
+"""Enable ``python -m idea_gen``."""
 
 from .cli import main
 

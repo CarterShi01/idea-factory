@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import Callable
 
-from .models import IdeaCandidate, Signal
+from idea_core.models import IdeaCandidate, Signal
 
 # Each template turns a pain into a differently-angled solution. Keeping a small
 # fixed set makes generation deterministic and reproducible for the demo.

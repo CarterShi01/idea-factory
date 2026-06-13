@@ -10,7 +10,7 @@ Two record shapes flow through the pipeline:
 * :class:`ScoredCandidate` -- an idea candidate plus its factor scores and the
   combined ``alpha`` (ranking score).
 
-All factor definitions live in :mod:`idea_factory.factors`; keeping the data
+All factor definitions live in :mod:`idea_core.factors`; keeping the data
 model dumb (no business logic) is deliberate so the same definitions can be
 shared with the downstream ``idea-evl`` repo without logic drift.
 """

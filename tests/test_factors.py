@@ -1,5 +1,5 @@
-from idea_factory.factors import FACTORS, compute_factors, pain_intensity
-from idea_factory.models import IdeaCandidate
+from idea_core.factors import FACTORS, compute_factors, pain_intensity
+from idea_core.models import IdeaCandidate
 
 
 def _candidate(**kw) -> IdeaCandidate:

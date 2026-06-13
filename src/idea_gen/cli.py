@@ -1,5 +1,5 @@
 """Command-line entry point. Thin by design: parse args, call the pipeline,
-print a short summary. All real work lives in :mod:`idea_factory.pipeline`.
+print a short summary. All real work lives in :mod:`idea_gen.pipeline`.
 """
 
 from __future__ import annotations
@@ -7,7 +7,7 @@ from __future__ import annotations
 import argparse
 from datetime import date
 
-from .models import SOURCE_BRAIN, SOURCE_EXTERNAL, SOURCE_PERSONA
+from idea_core.models import SOURCE_BRAIN, SOURCE_EXTERNAL, SOURCE_PERSONA
 from .pipeline import run_pipeline
 
 _SOURCE_CHOICES = [SOURCE_EXTERNAL, SOURCE_BRAIN, SOURCE_PERSONA]

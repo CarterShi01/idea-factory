@@ -6,8 +6,8 @@ GitHub Trending RSS, etc.) are stage 1 of the roadmap and belong behind an
 explicit, opt-in ``collect`` command -- never on this default demo path.
 
 Each loader returns a list of plain ``dict`` raw records tagged with their
-``source``. The :mod:`idea_factory.normalize` stage turns these into
-:class:`~idea_factory.models.Signal` objects.
+``source``. The :mod:`idea_gen.normalize` stage turns these into
+:class:`~idea_core.models.Signal` objects.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from .models import SOURCE_BRAIN, SOURCE_EXTERNAL, SOURCE_PERSONA
+from idea_core.models import SOURCE_BRAIN, SOURCE_EXTERNAL, SOURCE_PERSONA
 
 
 def _read_json(path: Path) -> list[dict]:

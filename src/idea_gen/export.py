@@ -12,7 +12,7 @@ import json
 from datetime import date
 from pathlib import Path
 
-from .models import ScoredCandidate
+from idea_core.models import ScoredCandidate
 
 
 def write_json(scored: list[ScoredCandidate], path: Path) -> None:

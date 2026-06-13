@@ -15,7 +15,7 @@ from __future__ import annotations
 import hashlib
 import re
 
-from .models import (
+from idea_core.models import (
     CONFIDENCE_REAL,
     SOURCE_EXTERNAL,
     Signal,

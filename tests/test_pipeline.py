@@ -1,6 +1,6 @@
 from datetime import date
 
-from idea_factory.pipeline import run_pipeline
+from idea_gen.pipeline import run_pipeline
 
 REPO_DATA = "data"
 REF_DATE = date(2026, 6, 13)

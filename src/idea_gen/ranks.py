@@ -18,8 +18,8 @@ import math
 import re
 from datetime import date
 
-from .factors import compute_factors
-from .models import IdeaCandidate, ScoredCandidate
+from idea_core.factors import compute_factors
+from idea_core.models import IdeaCandidate, ScoredCandidate
 
 DEFAULT_WEIGHTS = {
     "market_freshness": 0.18,
