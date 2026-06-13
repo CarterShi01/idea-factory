@@ -20,6 +20,10 @@ data/processed/*.md
 # LLM batch request/response packs (CC-handoff mode)
 data/llm_jobs/
 
+# Dynamic-source state + scrape cache (regenerated; never hand-edit)
+data/state/
+data/cache/
+
 # Local secrets (real provider keys live only in env / .env, never in git)
 .env
 

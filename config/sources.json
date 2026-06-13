@@ -1,0 +1,36 @@
+{
+  "static_external": { "enabled": true },
+  "brain": { "enabled": true },
+  "persona": { "enabled": true },
+
+  "hn_algolia": {
+    "enabled": false,
+    "queries": ["ai agent", "rag", "local-first", "indie saas"],
+    "window_days": 7,
+    "hits_per_query": 40
+  },
+
+  "vps_browser": {
+    "enabled": false,
+    "_comment": "经 Windows VPS 已登录的 Chrome 抓中文站；cdp_endpoint 填 tailnet 上 Chrome 的 remote-debugging 端口。targets 的选择器需按各站当前 DOM 调。",
+    "cdp_endpoint": "http://100.111.25.20:9222",
+    "nav_timeout_ms": 30000,
+    "max_items_per_target": 20,
+    "targets": [
+      {
+        "name": "xiaohongshu",
+        "category": "独立开发",
+        "url": "https://www.xiaohongshu.com/search_result?keyword=%E7%8B%AC%E7%AB%8B%E5%BC%80%E5%8F%91",
+        "item_selector": "section.note-item",
+        "title_selector": "a.title, span.title"
+      },
+      {
+        "name": "zhihu",
+        "category": "创业痛点",
+        "url": "https://www.zhihu.com/search?type=content&q=%E5%88%9B%E4%B8%9A%20%E7%97%9B%E7%82%B9",
+        "item_selector": ".SearchResult-Card",
+        "title_selector": ".ContentItem-title"
+      }
+    ]
+  }
+}

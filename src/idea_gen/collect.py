@@ -1,107 +1,62 @@
-"""Stage 1 -- collect raw records from the three idea sources.
+"""Stage 1 -- 采集:适配器分发器(配置驱动 + 注册表)。
 
-This MVP is **offline by contract**: every loader reads from local files under
-``data/raw/`` and makes no network calls. Live sources (Hacker News / arXiv /
-GitHub Trending RSS, etc.) are stage 1 of the roadmap and belong behind an
-explicit, opt-in ``collect`` command -- never on this default demo path.
+历史上这里是三个写死的文件读取;现在升级为「适配器协议 + 配置驱动」(见
+:mod:`idea_gen.sources`)。``collect_all`` 的签名与产出对**离线默认路径保持不变**
+(只读 ``data/raw``、零网络),所以现有 pipeline / Studio / 测试无感。
 
-Each loader returns a list of plain ``dict`` raw records tagged with their
-``source``. The :mod:`idea_gen.normalize` stage turns these into
-:class:`~idea_core.models.Signal` objects.
+动态:传 ``live=True`` 时,联网型适配器(hn_algolia / vps_browser …)才真正抓取;
+默认 ``live=False`` 时它们返回 ``[]``,等价于原来的纯离线行为。
 """
 
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
-from idea_core.models import SOURCE_BRAIN, SOURCE_EXTERNAL, SOURCE_PERSONA
+from .sources import REGISTRY, CollectContext, ensure_loaded
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
-def _read_json(path: Path) -> list[dict]:
-    if not path.exists():
-        return []
-    with path.open(encoding="utf-8") as fh:
-        data = json.load(fh)
-    return data if isinstance(data, list) else [data]
+def _load_sources_config() -> dict:
+    path = Path(os.environ.get("IDEA_SOURCES_CONFIG", _REPO_ROOT / "config" / "sources.json"))
+    if path.exists():
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except (ValueError, OSError):
+            pass
+    # 兜底:三个静态源默认开,联网源默认关
+    return {"static_external": {}, "brain": {}, "persona": {}}
 
 
-def _read_jsonl(path: Path) -> list[dict]:
-    if not path.exists():
-        return []
-    records: list[dict] = []
-    with path.open(encoding="utf-8") as fh:
-        for line in fh:
-            line = line.strip()
-            if line:
-                records.append(json.loads(line))
-    return records
+def collect_all(
+    data_dir: str | Path = "data",
+    sources: list[str] | None = None,
+    live: bool = False,
+    config: dict | None = None,
+) -> list[dict]:
+    """从(全部或子集)信号源采集 raw 记录。
 
-
-def collect_external(raw_dir: Path) -> list[dict]:
-    """External-world signals: product launches, trends, papers (offline sample)."""
-    records = _read_json(raw_dir / "sample_signals.json")
-    for r in records:
-        r.setdefault("source", SOURCE_EXTERNAL)
-    return records
-
-
-def collect_brain(raw_dir: Path) -> list[dict]:
-    """Founder's own ideas, one JSON object per line in ``inbox.jsonl``."""
-    records = _read_jsonl(raw_dir / "inbox.jsonl")
-    for r in records:
-        r.setdefault("source", SOURCE_BRAIN)
-        r.setdefault("source_name", "manual")
-    return records
-
-
-def collect_personas(raw_dir: Path) -> list[dict]:
-    """Simulated pain analysis.
-
-    Each persona declares a target user and a list of pains. We expand them into
-    one synthetic signal per pain. These are flagged ``confidence=synthetic`` so
-    downstream stages can treat them with the suspicion they deserve -- personas
-    tend to be systematically optimistic.
+    ``sources`` 可按 ``SOURCE_*`` 常量或适配器 ``name`` 过滤;``None`` = 全部启用的源。
+    ``live=True`` 才允许联网型适配器触网。单源失败被隔离(不影响其它源)。
     """
-    personas = _read_json(raw_dir / "personas.json")
+    ensure_loaded()
+    data_dir = Path(data_dir)
+    raw_dir = data_dir / "raw"
+    cache_dir = data_dir / "cache"
+    cfg = config or _load_sources_config()
+
     records: list[dict] = []
-    for persona in personas:
-        who = persona.get("persona", "a target user")
-        for pain in persona.get("pains", []):
-            records.append(
-                {
-                    "source": SOURCE_PERSONA,
-                    "source_name": "persona",
-                    "title": pain.get("summary", ""),
-                    "text": pain.get("verbatim", pain.get("summary", "")),
-                    "pain": pain.get("summary", ""),
-                    "category": persona.get("domain"),
-                    "target_user": who,
-                    "confidence": "synthetic",
-                    # A synthetic pain only earns its place if at least one real
-                    # signal corroborates it; we surface the flag here and leave
-                    # the corroboration check to a later roadmap stage.
-                    "corroborated": pain.get("corroborated", False),
-                }
-            )
-    return records
-
-
-def collect_all(data_dir: Path, sources: list[str] | None = None) -> list[dict]:
-    """Collect from all (or a subset of) the three sources.
-
-    ``sources`` filters by the ``SOURCE_*`` constants; ``None`` means all.
-    """
-    raw_dir = Path(data_dir) / "raw"
-    loaders = {
-        SOURCE_EXTERNAL: collect_external,
-        SOURCE_BRAIN: collect_brain,
-        SOURCE_PERSONA: collect_personas,
-    }
-    wanted = sources or list(loaders)
-    records: list[dict] = []
-    for source in wanted:
-        loader = loaders.get(source)
-        if loader:
-            records.extend(loader(raw_dir))
+    for name, adapter in REGISTRY.items():
+        section = cfg.get(name, {})
+        if not section.get("enabled", True):
+            continue
+        if sources and adapter.source not in sources and name not in sources:
+            continue
+        ctx = CollectContext(raw_dir=raw_dir, cache_dir=cache_dir, config=section, live=live)
+        try:
+            records.extend(adapter.collect(ctx))
+        except Exception:  # noqa: BLE001 — 单源隔离:一个源挂掉不拖垮整批
+            continue
     return records
