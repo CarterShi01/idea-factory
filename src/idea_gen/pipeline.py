@@ -75,6 +75,7 @@ def run_pipeline(
     job_dir: str | Path = "data/llm_jobs",
     live: bool = False,
     use_state: bool = False,
+    persona_backend: str = "static",
 ) -> PipelineResult:
     """Run the generation pipeline.
 
@@ -89,7 +90,8 @@ def run_pipeline(
     today = today or date.today()
 
     # 1. collect -> 2. normalize -> 3. dedup (+ 动态状态/趋势)
-    raw = collect.collect_all(data_dir, sources=sources, live=live)
+    persona_llm = None if persona_backend == "static" else _llm_backend(persona_backend, "persona_sim", today, job_dir)
+    raw = collect.collect_all(data_dir, sources=sources, live=live, persona_llm=persona_llm)
     signals = normalize.normalize(raw)
     if use_state:
         kept = _dynamic_dedup_and_trends(signals, data_dir / "state", today)

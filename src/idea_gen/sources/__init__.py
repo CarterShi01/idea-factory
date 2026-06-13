@@ -44,6 +44,8 @@ class CollectContext:
     live: bool = False                           # True 才允许触网
     get_json: Callable = _default_get_json
     get_text: Callable = _default_get_text
+    llm: object = None                           # 需 LLM 的源(如源③合成)用;None=不合成
+    peer_records: list = field(default_factory=list)  # 同轮其它源已采集的记录(源③用作 grounding)
 
 
 # --- 适配器协议 + 注册表 ----------------------------------------------------

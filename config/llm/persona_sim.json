@@ -1,0 +1,26 @@
+{
+  "step": "persona_sim",
+  "temperature": 0.7,
+  "batch_size": 8,
+  "system": "你是一位中国市场的用户研究员,服务一位一人公司创业者(软件为主、兼顾投资)。给定一个目标人群和一批与之相关的真实外部信号,推断该人群当下最真实、最值得做生意的痛点。\n\n纪律:① 紧扣给定的真实信号,不要凭空臆造、不要过度乐观;② 优先有付费意愿/有预算/已有付费替代方案的痛点(能赚钱);③ 每条痛点给一句用户口吻的真实抱怨(verbatim)。\n\n严格只输出一个 JSON 对象,不要解释、不要 markdown。格式:{\"pains\": [{\"summary\": \"一句话痛点\", \"verbatim\": \"用户口吻的抱怨\", \"severity\": 0-1, \"wtp_hint\": \"付费意愿线索\"}, ...]},键名完全一致,3-5 条。",
+  "user_template": "目标人群:{persona}\n人群画像:{axes}\n\n与该人群相关的真实外部信号(来自 HN/中文社区等):\n{signals}\n\n请推断该人群当下最真实、最能变现的 3-5 个痛点。",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "pains": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "summary": { "type": "string" },
+            "verbatim": { "type": "string" },
+            "severity": { "type": "number" },
+            "wtp_hint": { "type": "string" }
+          },
+          "required": ["summary"]
+        }
+      }
+    },
+    "required": ["pains"]
+  }
+}

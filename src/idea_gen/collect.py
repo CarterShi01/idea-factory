@@ -35,28 +35,52 @@ def collect_all(
     sources: list[str] | None = None,
     live: bool = False,
     config: dict | None = None,
+    persona_llm: object = None,
 ) -> list[dict]:
     """从(全部或子集)信号源采集 raw 记录。
 
     ``sources`` 可按 ``SOURCE_*`` 常量或适配器 ``name`` 过滤;``None`` = 全部启用的源。
-    ``live=True`` 才允许联网型适配器触网。单源失败被隔离(不影响其它源)。
+    ``live=True`` 才允许联网型适配器触网。``persona_llm`` 给定时,源③(pain_persona)用它
+    做 grounded 合成(否则走静态)。**两遍采集**:先采源①②,再把其结果作为 grounding 喂源③。
+    单源失败被隔离(不影响其它源)。
     """
+    from idea_core.models import SOURCE_PERSONA
+
     ensure_loaded()
     data_dir = Path(data_dir)
     raw_dir = data_dir / "raw"
     cache_dir = data_dir / "cache"
     cfg = config or _load_sources_config()
 
-    records: list[dict] = []
-    for name, adapter in REGISTRY.items():
-        section = cfg.get(name, {})
-        if not section.get("enabled", True):
-            continue
+    def _wanted(adapter, name) -> bool:
+        if not cfg.get(name, {}).get("enabled", True):
+            return False
         if sources and adapter.source not in sources and name not in sources:
+            return False
+        return True
+
+    # 第一遍:源①②(非 persona)
+    peer: list[dict] = []
+    for name, adapter in REGISTRY.items():
+        if adapter.source == SOURCE_PERSONA or not _wanted(adapter, name):
             continue
-        ctx = CollectContext(raw_dir=raw_dir, cache_dir=cache_dir, config=section, live=live)
+        ctx = CollectContext(raw_dir=raw_dir, cache_dir=cache_dir, config=cfg.get(name, {}), live=live)
+        try:
+            peer.extend(adapter.collect(ctx))
+        except Exception:  # noqa: BLE001 — 单源隔离
+            continue
+
+    # 第二遍:源③(persona),拿第一遍结果作 grounding
+    records: list[dict] = list(peer)
+    for name, adapter in REGISTRY.items():
+        if adapter.source != SOURCE_PERSONA or not _wanted(adapter, name):
+            continue
+        ctx = CollectContext(
+            raw_dir=raw_dir, cache_dir=cache_dir, config=cfg.get(name, {}),
+            live=live, llm=persona_llm, peer_records=peer,
+        )
         try:
             records.extend(adapter.collect(ctx))
-        except Exception:  # noqa: BLE001 — 单源隔离:一个源挂掉不拖垮整批
+        except Exception:  # noqa: BLE001
             continue
     return records
