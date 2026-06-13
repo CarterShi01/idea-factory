@@ -1,72 +1,115 @@
-"""Persistent storage for user-set rank overrides.
+"""Stage 5 -- factor scoring + time decay + diversity-aware ranking.
 
-Overrides are stored in ``data/ranks.json`` as a flat JSON object mapping
-idea ids (``str``) to ranks (``int`` in ``[RANK_MIN, RANK_MAX]``). Writes are
-atomic: the new contents are written to a temp file in the same directory
-and then renamed over the target path so partial writes are not observable.
+* **alpha** = weighted sum of the factor scores, then multiplied by a time-decay
+  term. Opportunity windows decay: the longer ago a signal was observed, the
+  more crowded the space tends to be, so older candidates lose ground (but never
+  to zero -- they keep a floor).
+* **ranking** uses a lightweight MMR (maximal marginal relevance) pass so the
+  final list optimizes both *novelty* (each item scores well) and *diversity*
+  (the set isn't ten variations of one theme).
+
+Default weights put the most mass on ``pain_intensity`` -- validated need is the
+scarce ingredient, per the research.
 """
 
 from __future__ import annotations
 
-import json
-import os
-import tempfile
-from pathlib import Path
+import math
+import re
+from datetime import date
 
-from .generate import RANK_MAX, RANK_MIN
+from .factors import compute_factors
+from .models import IdeaCandidate, ScoredCandidate
 
-DEFAULT_RANKS_PATH = Path("data/ranks.json")
-RANKS_PATH = DEFAULT_RANKS_PATH  # backward-compat alias
+DEFAULT_WEIGHTS = {
+    "market_freshness": 0.18,
+    "pain_intensity": 0.28,
+    "build_cost": 0.18,
+    "moat_signal": 0.12,
+    "competition_density": 0.12,
+    "distribution_fit": 0.12,
+}
+
+_HALF_LIFE_DAYS = 30.0      # opportunity-window half life
+_DECAY_FLOOR = 0.4          # an ancient signal still retains 40% of its alpha
+_WORD_RE = re.compile(r"[a-z0-9]+")
 
 
-class InvalidRankError(ValueError):
-    """Raised when a supplied rank is outside the allowed range."""
-
-
-def get_overrides(path: Path = DEFAULT_RANKS_PATH) -> dict[str, int]:
-    """Return the persisted overrides mapping, or ``{}`` if absent."""
-    if not path.exists():
-        return {}
+def _age_days(observed_on: str, today: date) -> int:
     try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
-        return {}
-    if not isinstance(raw, dict):
-        return {}
-    return {str(k): int(v) for k, v in raw.items() if isinstance(v, int) and not isinstance(v, bool)}
+        observed = date.fromisoformat(observed_on)
+    except (ValueError, TypeError):
+        return 0
+    return max(0, (today - observed).days)
 
 
-# backward-compat alias used by api.py pre-T04
-load_overrides = get_overrides
+def _decay(observed_on: str, today: date) -> float:
+    age = _age_days(observed_on, today)
+    raw = math.exp(-math.log(2) / _HALF_LIFE_DAYS * age)
+    return _DECAY_FLOOR + (1 - _DECAY_FLOOR) * raw
 
 
-def set_override(idea_id: str, rank: int, path: Path = DEFAULT_RANKS_PATH) -> dict[str, int]:
-    """Persist a rank override for ``idea_id`` and return the full map.
+def score_candidate(
+    candidate: IdeaCandidate,
+    today: date,
+    weights: dict[str, float] | None = None,
+) -> ScoredCandidate:
+    weights = weights or DEFAULT_WEIGHTS
+    factors = compute_factors(candidate)
+    base = sum(weights.get(name, 0.0) * value for name, value in factors.items())
+    decay = _decay(candidate.observed_on, today)
+    return ScoredCandidate(
+        candidate=candidate,
+        factors=factors,
+        alpha=round(base * decay, 4),
+        decay=round(decay, 4),
+    )
 
-    Raises ``InvalidRankError`` if ``rank`` is outside ``[RANK_MIN, RANK_MAX]``.
-    Raises ``ValueError`` if ``idea_id`` is empty.
+
+def score(
+    candidates: list[IdeaCandidate],
+    today: date,
+    weights: dict[str, float] | None = None,
+) -> list[ScoredCandidate]:
+    return [score_candidate(c, today, weights) for c in candidates]
+
+
+def _tokens(c: IdeaCandidate) -> set[str]:
+    return set(_WORD_RE.findall(c.text()))
+
+
+def _similarity(a: set[str], b: set[str]) -> float:
+    if not a or not b:
+        return 0.0
+    return len(a & b) / len(a | b)
+
+
+def rank(
+    scored: list[ScoredCandidate],
+    diversity_lambda: float = 0.3,
+) -> list[ScoredCandidate]:
+    """Re-order via MMR so the head of the list is high-scoring *and* varied.
+
+    ``diversity_lambda`` is how hard we penalize similarity to already-picked
+    candidates (0 = pure alpha sort, higher = more diversity pressure).
     """
-    if not isinstance(rank, int) or isinstance(rank, bool):
-        raise InvalidRankError(f"rank must be an integer, got {type(rank).__name__}")
-    if not (RANK_MIN <= rank <= RANK_MAX):
-        raise InvalidRankError(
-            f"rank must be between {RANK_MIN} and {RANK_MAX} inclusive, got {rank}"
-        )
-    if not idea_id:
-        raise ValueError("idea_id must be a non-empty string")
-    overrides = get_overrides(path)
-    overrides[str(idea_id)] = int(rank)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp_name = tempfile.mkstemp(prefix=".ranks-", suffix=".json", dir=str(path.parent))
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            json.dump(overrides, fh, indent=2, sort_keys=True)
-            fh.write("\n")
-        os.replace(tmp_name, path)
-    except Exception:
-        try:
-            os.unlink(tmp_name)
-        except OSError:
-            pass
-        raise
-    return overrides
+    pool = sorted(scored, key=lambda s: (-s.alpha, s.candidate.id))
+    token_cache = {s.candidate.id: _tokens(s.candidate) for s in pool}
+    selected: list[ScoredCandidate] = []
+
+    while pool:
+        best, best_mmr = None, None
+        for s in pool:
+            max_sim = max(
+                (_similarity(token_cache[s.candidate.id], token_cache[p.candidate.id]) for p in selected),
+                default=0.0,
+            )
+            mmr = s.alpha - diversity_lambda * max_sim
+            # Tie-break on alpha then id for fully deterministic ordering.
+            key = (mmr, s.alpha, s.candidate.id)
+            if best_mmr is None or key > best_mmr:
+                best, best_mmr = s, key
+        selected.append(best)
+        pool.remove(best)
+
+    return selected

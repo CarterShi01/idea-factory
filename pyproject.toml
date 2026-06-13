@@ -1,16 +1,23 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "idea-factory"
-version = "0.0.1"
-description = "Collect product signals and generate startup idea candidates."
+version = "0.1.0"
+description = "Offline MVP that turns three-source signals into ranked startup-idea candidates"
+readme = "README.md"
 requires-python = ">=3.10"
-dependencies = [
-  "requests>=2.31.0",
-  "python-dotenv>=1.0.0",
-  "flask>=3.0.0",
-]
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0"]
 
 [project.scripts]
 idea-factory = "idea_factory.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

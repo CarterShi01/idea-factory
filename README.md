@@ -1,90 +1,75 @@
 # Idea Factory
 
-Idea Factory is an information collection and idea generation project.
+Turns **three sources of signal** — external events, the founder's own ideas, and
+simulated target-user pain — into a ranked daily list of startup-idea candidates.
 
-The early demo focuses on collecting product launch information, organizing it into structured records, and generating startup idea candidates for further review.
+This repo is the **generation + factor-scoring** half of the system (the "alpha"
+side, in the quant analogy). The **evaluation / kill-gate** half lives in the
+sibling `idea-evl` repo. The design rationale, the open-source landscape it
+borrows from, and the full roadmap are in [`docs/research/`](docs/research/) —
+start with [`00-executive-summary-and-roadmap.md`](docs/research/00-executive-summary-and-roadmap.md).
 
-This project is designed to become a lightweight AI-agent-driven idea production pipeline over time.
+> **Current stage: roadmap stage 0 — offline MVP.** Pure Python, standard library
+> only, no network calls. It reads local sample files under `data/raw/`, runs the
+> full pipeline, and writes JSON + a Markdown digest to `data/processed/`.
 
-## Demo: mock product-to-idea pipeline
+## Pipeline
 
-The current demo runs entirely offline against a local sample file. It does
-not call any external APIs.
+```
+collect → normalize → dedup → generate → score → rank → export
+```
 
-### Install
+| Stage | Module | What it does |
+|-------|--------|--------------|
+| collect   | `collect.py`   | Load raw records from the 3 sources (offline files) |
+| normalize | `normalize.py` | → structured `Signal`; lift a `pain_statement`; assign stable id + dedup key |
+| dedup     | `dedup.py`     | Drop exact + near-duplicate signals ("already seen") |
+| generate  | `generate.py`  | Over-generate idea candidates per signal (rule-based backend) |
+| score     | `factors.py` + `ranks.py` | Pure factor functions → weighted, time-decayed `alpha` |
+| rank      | `ranks.py`     | MMR re-ranking for novelty **and** diversity |
+| export    | `export.py`    | Write `ideas.json` (machine, for idea-evl) + `ideas.md` (human digest) |
+
+The **factor library** (`factors.py`) is the single source of truth for how an
+idea is scored, and is meant to be shared verbatim with `idea-evl` so the two
+repos never drift.
+
+## Install & run
 
 ```bash
 pip install -e .
-```
 
-### Run
-
-```bash
+# Run the full pipeline against the bundled sample data
 idea-factory
+
+# Options
+idea-factory --date 2026-06-13 --top-n 15 --output-dir /tmp/out
+idea-factory --sources external_event brain_inbox   # subset of sources
+python -m idea_factory                              # equivalent module form
 ```
 
-This reads `data/raw/sample_products.json`, normalizes the records, generates
-mock idea candidates, and writes the results to:
+Output lands in `data/processed/ideas.json` and `data/processed/ideas.md`.
 
-- `data/processed/ideas.json`
-- `data/processed/ideas.md`
+## The three sources (`data/raw/`)
 
-You can point at a different input file or output directory:
+| Source | File | Confidence |
+|--------|------|------------|
+| External events | `sample_signals.json` | real |
+| Founder's inbox | `inbox.jsonl` (one idea per line) | real |
+| Simulated pain  | `personas.json` | **synthetic** (flagged, treated with suspicion) |
+
+Live external sources (Hacker News / arXiv / GitHub Trending RSS, …) are roadmap
+stage 1 and will sit behind an explicit, opt-in `collect` command — **never** on
+this default offline path.
+
+## Tests
 
 ```bash
-idea-factory --input data/raw/sample_products.json --output-dir data/processed
+pip install -e ".[dev]"
+pytest
 ```
 
-The pipeline is also runnable as a module:
+## Non-goals (this stage)
 
-```bash
-python -m idea_factory.cli
-```
-
-### Verify the install
-
-To confirm the package is installed and importable, run the `hello` subcommand:
-
-```bash
-python -m idea_factory hello
-```
-
-It prints `Hello from idea-factory!` and exits 0. cooool.
-
-## Collecting external signals (opt-in, network)
-
-The `collect` subcommand fetches real external signals and is **separate from
-the offline demo pipeline above** — the default `idea-factory` run never touches
-the network. Sources:
-
-- **Hacker News** — top stories via the public Firebase API.
-- **Product Hunt** — top posts via the GraphQL API. Requires a developer token
-  in `PRODUCT_HUNT_TOKEN` (a local `.env` is honoured). Without a token this
-  source is skipped; the others still run.
-- **Domestic startup news** — 36kr / 虎嗅 RSS feeds.
-
-```bash
-# Fetch up to 10 items per source, save to data/raw/collected.json,
-# and flag which existing ideas each new signal may relate to.
-idea-factory collect
-
-# Tune volume / output location, or skip the idea matching:
-idea-factory collect --limit 20 --output data/raw/collected.json --no-match
-```
-
-Each collected record carries a `source` field (its 灵感来源 / inspiration
-source); ideas generated from a record inherit it as `inspiration_source`.
-
-### Scheduling (default: once per day)
-
-Run on an interval with the built-in standard-library scheduler:
-
-```bash
-idea-factory collect --schedule --interval-hours 24
-```
-
-Or drive it from `cron` (no long-running process) — e.g. daily at 08:00:
-
-```cron
-0 8 * * * cd /path/to/idea-factory && idea-factory collect >> collect.log 2>&1
-```
+No web UI, no database service, no heavy multi-agent framework, no network on the
+default path. These are deferred to later roadmap stages and only added when the
+roadmap reaches them. See `docs/research/00-...` §6.

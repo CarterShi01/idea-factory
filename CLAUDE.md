@@ -1,86 +1,97 @@
 # CLAUDE.md
 
-You are a development executor for the Idea Factory repository.
+You are a development executor for the **Idea Factory** repository.
 
 ## What this project is (30-second read)
 
-Idea Factory collects product launch / market signal information and turns it into structured startup idea candidates. It is intended to grow into a lightweight AI-agent-driven idea production pipeline.
+Idea Factory turns **three sources of signal** — external events, the founder's
+own ideas, and simulated target-user pain — into a ranked daily list of
+structured startup-idea candidates. It is the **generation + factor-scoring**
+half of a two-repo system; the sibling `idea-evl` repo is the **evaluation /
+kill-gate** half. Together they aim to produce 10–20 vetted startup ideas a day
+for a solo software-and-investing founder.
 
-**Current stage: Early offline demo.** The pipeline runs against a local sample file (`data/raw/sample_products.json`), normalizes records, generates mock idea candidates, and writes JSON / Markdown to `data/processed/`. No external APIs are called yet.
+The design, the open-source landscape it borrows from, and the staged roadmap
+live in `docs/research/` (read `00-executive-summary-and-roadmap.md` first).
 
-This repository is one of the projects managed by **CreatorMesh**. Tasks usually arrive as GitHub issues dispatched by CreatorMesh; the `@claude` mention in an issue comment triggers the Claude Code GitHub Action defined in `.github/workflows/claude.yml`.
+**Current stage: roadmap stage 0 — offline MVP.** Pure Python, standard library
+only, no network calls. Reads `data/raw/`, runs the pipeline, writes
+`data/processed/`.
 
 ## Required reading
 
-**Every task:**
+1. This file
+2. `README.md` — install / run / pipeline overview
+3. `docs/research/00-executive-summary-and-roadmap.md` — system blueprint, roadmap, non-goals
 
-1. This file (`CLAUDE.md`)
-2. `README.md` — install / run instructions, current CLI surface
-3. `docs/project-brief.md` — goals, early demo scope, and **explicit non-goals**
+By task type, also read the module(s) you touch plus `pipeline.py` to see how
+stages compose.
 
-**By task type (add to the above):**
+## The pipeline (and what lives where)
 
-| Task type | Additional reading |
-|-----------|-------------------|
-| Touching `src/idea_factory/` | The specific module(s) you are changing, plus `pipeline.py` to see how stages compose |
-| Adding a new pipeline stage | `pipeline.py`, then `normalize.py` / `generate.py` / `ranks.py` as reference patterns |
-| Changing CLI behavior | `cli.py` and `__main__.py` |
-| Changing data shapes | `normalize.py`, `export.py`, and the sample files in `data/raw/` |
-
-## Task execution workflow
-
-1. Read the required documents above.
-2. Restate the task briefly in your first response.
-3. Sketch a short implementation plan before editing files.
-4. Make the smallest reasonable change that satisfies the task.
-5. If you add or change a stage, keep the offline-only contract: do not introduce network calls in the demo path.
-6. Run available checks when relevant:
-   - `pip install -e .`
-   - `idea-factory` (smoke-test the pipeline end-to-end)
-   - `python -m idea_factory.cli --input data/raw/sample_products.json --output-dir /tmp/idea-out` (alternate invocation)
-7. Create or update a PR summary: What changed · Why · How tested · Risks · Follow-up tasks.
-
-## Hard rules
-
-- Do not merge into the default branch.
-- Do not deploy anything.
-- Do not touch secrets, credentials, tokens, billing, or DNS.
-- Do not add real external API calls to the demo pipeline without explicit human approval (the demo is intentionally offline).
-- All code changes must go through PR. The GitHub Action will push to `claude/issue-<N>-*` branches; do not push directly to the default branch.
-- High-risk or scope-expanding actions require human approval before execution.
-
-## Early demo principles (non-goals)
-
-Per `docs/project-brief.md`, the first demo deliberately does **not** include:
-
-- A web UI
-- A database
-- A complex multi-agent framework
-- User accounts or payment
-- Deployment automation
-
-Do not introduce any of these as a side effect of a smaller task. If a task seems to require one, stop and ask in the PR / issue rather than scoping up silently.
-
-## Python / packaging conventions
-
-- Python ≥ 3.10. Package layout follows `src/` layout (`src/idea_factory/`), exposed via `pyproject.toml` setuptools `packages.find`.
-- Console entry point: `idea-factory = "idea_factory.cli:main"`. Keep `cli.py` thin — it should parse args and delegate to `pipeline.py`.
-- Dependencies are declared in `pyproject.toml` only. Do not add a separate `requirements.txt`.
-- Prefer the standard library where reasonable; only add a new dependency when it is genuinely needed for the task at hand.
-
-## What lives where
+```
+collect → normalize → dedup → generate → score → rank → export
+```
 
 | Path | Purpose |
 |---|---|
-| `src/idea_factory/pipeline.py` | Orchestrates the stages (normalize → generate → rank → export) |
-| `src/idea_factory/normalize.py` | Raw record → structured record |
-| `src/idea_factory/generate.py` | Structured records → idea candidates |
-| `src/idea_factory/ranks.py` | Scoring / ordering of candidates |
-| `src/idea_factory/export.py` | Writes JSON / Markdown output |
-| `src/idea_factory/cli.py` / `__main__.py` | Command-line entry |
-| `src/idea_factory/api.py` | Reserved / experimental — not part of the demo pipeline |
-| `src/idea_factory/collect.py` | Opt-in external signal collection (HN / Product Hunt / RSS). Network only on explicit `collect`; NOT in the offline demo path |
-| `src/idea_factory/match.py` | Keyword matching of fresh signals against existing ideas |
-| `data/raw/` | Sample input fixtures — safe to read, only extend with synthetic data |
+| `src/idea_factory/models.py` | Data model (`Signal`, `IdeaCandidate`, `ScoredCandidate`). No business logic. |
+| `src/idea_factory/collect.py` | Stage 1: load raw records from the 3 sources. **Offline only.** |
+| `src/idea_factory/normalize.py` | Stage 2: raw → `Signal`; lift `pain_statement`; stable id + dedup key |
+| `src/idea_factory/dedup.py` | Stage 3: drop exact + near-duplicate signals |
+| `src/idea_factory/generate.py` | Stage 4: over-generate candidates (pluggable backend; default rule-based) |
+| `src/idea_factory/factors.py` | The factor library — pure `candidate → float` functions. **Single source of truth.** |
+| `src/idea_factory/ranks.py` | Stage 5: weighted + time-decayed alpha; MMR diversity ranking |
+| `src/idea_factory/export.py` | Stage 7: write `ideas.json` (for idea-evl) + `ideas.md` (human) |
+| `src/idea_factory/pipeline.py` | Orchestrates the stages |
+| `src/idea_factory/cli.py` / `__main__.py` | Thin CLI entry |
+| `data/raw/` | Sample inputs (extend only with synthetic data) |
 | `data/processed/` | Generated output — never hand-edit; regenerate via the pipeline |
-| `tests/` | Test suite (extend here when adding logic) |
+| `docs/research/` | Design + landscape research (do not delete) |
+| `tests/` | Test suite (extend when adding logic) |
+
+## Task execution workflow
+
+1. Read the required docs. Restate the task briefly.
+2. Sketch a short plan before editing.
+3. Make the smallest reasonable change.
+4. Keep the offline contract: no network calls on the default pipeline path.
+5. Run checks:
+   - `pip install -e ".[dev]"`
+   - `idea-factory` (smoke-test end to end)
+   - `pytest`
+6. Update the PR summary: What changed · Why · How tested · Risks · Follow-up.
+
+## Hard rules
+
+- All code changes go through a PR; the GitHub Action pushes to `claude/issue-<N>-*`
+  branches. Do not push directly to the default branch **unless the human owner
+  explicitly instructs it in-session.**
+- Do not deploy; do not touch secrets, credentials, tokens, billing, or DNS.
+- Do not add real external API calls to the default pipeline without explicit
+  human approval (live sources are opt-in, roadmap stage 1+).
+- High-risk or scope-expanding actions require human approval first.
+
+## Core design principles (keep these intact)
+
+- **Factors are pure functions, single source of truth** (`factors.py`), so the
+  scoring shared with `idea-evl` never drifts (the freqtrade lesson).
+- **Generation over-produces; quality gating is idea-evl's job**, not the
+  generate stage's.
+- **Time matters**: every signal carries a date; alpha decays with age.
+- **Personas are synthetic and suspect**: flagged `confidence=synthetic`.
+
+## Non-goals at this stage
+
+No web UI, no database service, no heavy multi-agent framework, no network on the
+default path, no user accounts / payment / deployment automation. Add these only
+when the roadmap explicitly reaches the corresponding stage; if a task seems to
+need one, stop and ask rather than scoping up silently.
+
+## Python / packaging conventions
+
+- Python ≥ 3.10, `src/` layout, exposed via `pyproject.toml` setuptools.
+- Console entry point: `idea-factory = "idea_factory.cli:main"`. Keep `cli.py`
+  thin — parse args, delegate to `pipeline.py`.
+- **Standard library only** at this stage; dependencies declared in
+  `pyproject.toml` only. Add a dependency only when a task genuinely needs it.

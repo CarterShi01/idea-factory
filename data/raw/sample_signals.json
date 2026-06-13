@@ -1,0 +1,74 @@
+[
+  {
+    "source_name": "hn",
+    "title": "Show HN: I spend hours every week manually reconciling Stripe payouts",
+    "text": "Solo founders waste hours each month manually matching Stripe payouts to invoices in spreadsheets. It is tedious and error-prone.",
+    "pain": "Solo SaaS founders waste hours manually reconciling Stripe payouts against invoices",
+    "url": "https://news.ycombinator.com/item?id=demo1",
+    "category": "fintech-dev",
+    "observed_on": "2026-06-11"
+  },
+  {
+    "source_name": "github",
+    "title": "Trending: open-source framework for local-first LLM agents",
+    "text": "A local-first agent framework is trending; developers want privacy-preserving agents that run without sending data to the cloud.",
+    "pain": "Developers lack a privacy-preserving way to run LLM agents locally without cloud data leakage",
+    "url": "https://github.com/trending/demo2",
+    "category": "ai-dev",
+    "observed_on": "2026-06-12"
+  },
+  {
+    "source_name": "producthunt",
+    "title": "Yet another AI note-taking chatbot launched today",
+    "text": "Another generic AI note app launched. The space is crowded and undifferentiated.",
+    "pain": "Knowledge workers are overwhelmed by too many generic note apps that do not fit their workflow",
+    "url": "https://www.producthunt.com/demo3",
+    "category": "productivity",
+    "observed_on": "2026-06-10"
+  },
+  {
+    "source_name": "hn",
+    "title": "Ask HN: customer support teams drowning in repetitive tickets",
+    "text": "Support teams handle the same repetitive questions manually; it is slow and frustrating and burns agent time.",
+    "pain": "Customer support teams waste time manually answering repetitive tickets",
+    "url": "https://news.ycombinator.com/item?id=demo4",
+    "category": "ai-saas",
+    "observed_on": "2026-06-09"
+  },
+  {
+    "source_name": "arxiv",
+    "title": "New paper: retrieval-augmented agents for vertical domains",
+    "text": "Research shows RAG agents tuned to a narrow vertical with proprietary datasets outperform generic assistants.",
+    "pain": "Domain experts lack vertical AI assistants grounded in their proprietary domain data",
+    "url": "https://arxiv.org/abs/demo5",
+    "category": "ai-research",
+    "observed_on": "2026-05-20"
+  },
+  {
+    "source_name": "rss",
+    "title": "Indie devs struggle to keep changelogs and docs in sync",
+    "text": "Indie developers find it hard and tedious to keep release notes, changelogs and docs updated; it is repetitive manual work.",
+    "pain": "Indie developers waste time manually keeping changelogs and docs in sync with releases",
+    "url": "https://example.com/blog/demo6",
+    "category": "dev-tools",
+    "observed_on": "2026-06-08"
+  },
+  {
+    "source_name": "hn",
+    "title": "Angel investors lack a fast way to triage inbound deal flow",
+    "text": "Solo angels get overwhelmed by inbound pitches and lack a fast, structured way to triage deal flow.",
+    "pain": "Solo investors are overwhelmed and lack a fast way to triage inbound deal flow",
+    "url": "https://news.ycombinator.com/item?id=demo7",
+    "category": "investing",
+    "observed_on": "2026-06-05"
+  },
+  {
+    "source_name": "producthunt",
+    "title": "Voice-first AI tool for hands-free coding gains traction",
+    "text": "A voice-first multimodal coding assistant is gaining traction with developers who want hands-free workflows.",
+    "pain": "Developers with RSI lack a reliable voice-first way to code hands-free",
+    "url": "https://www.producthunt.com/demo8",
+    "category": "ai-dev",
+    "observed_on": "2026-04-15"
+  }
+]

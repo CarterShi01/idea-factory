@@ -1,0 +1,29 @@
+[
+  {
+    "persona": "Bootstrapped solo SaaS founder",
+    "domain": "saas-ops",
+    "pains": [
+      {
+        "summary": "Solo founders waste hours manually triaging support emails instead of building",
+        "verbatim": "I spend my mornings answering the same support emails by hand and it is exhausting and repetitive.",
+        "corroborated": true
+      },
+      {
+        "summary": "Founders lack a cheap way to test pricing changes without breaking billing",
+        "verbatim": "Every time I want to test a new price I am terrified of breaking my Stripe billing.",
+        "corroborated": false
+      }
+    ]
+  },
+  {
+    "persona": "Part-time angel investor who also builds software",
+    "domain": "investing",
+    "pains": [
+      {
+        "summary": "Investors struggle to track which portfolio companies need attention each week",
+        "verbatim": "I never know which of my portfolio companies is quietly struggling until it is too late.",
+        "corroborated": true
+      }
+    ]
+  }
+]

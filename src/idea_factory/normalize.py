@@ -1,57 +1,87 @@
-"""Normalize raw product records into a consistent structured form."""
+"""Stage 2 -- normalize raw records into structured :class:`Signal` objects.
+
+Two jobs beyond field-mapping:
+
+1. **Abstract the pain.** We lift a ``pain_statement`` ("who struggles with
+   what, in which situation") out of the raw title/text so the generate stage
+   reasons about the underlying need rather than a surface headline.
+2. **Assign stable identity.** ``id`` is a content hash so re-running on the
+   same input is idempotent; ``dedup_key`` is a lexical fingerprint the dedup
+   stage uses to spot near-duplicates.
+"""
 
 from __future__ import annotations
 
-from typing import Any
+import hashlib
+import re
+
+from .models import (
+    CONFIDENCE_REAL,
+    SOURCE_EXTERNAL,
+    Signal,
+)
+
+_DEFAULT_DATE = "1970-01-01"
+_WORD_RE = re.compile(r"[a-z0-9]+")
+_STOPWORDS = {
+    "the", "a", "an", "and", "or", "of", "to", "for", "in", "on", "with",
+    "is", "are", "be", "that", "this", "it", "as", "by", "at", "from",
+    "their", "they", "you", "your", "we", "our", "i",
+}
 
 
-def _clean_str(value: Any) -> str:
-    if value is None:
-        return ""
-    return str(value).strip()
+def _stable_id(source_name: str, title: str, url: str | None) -> str:
+    basis = f"{source_name}|{title.strip().lower()}|{url or ''}".encode("utf-8")
+    return hashlib.sha1(basis).hexdigest()[:12]
 
 
-def _clean_list(value: Any) -> list[str]:
-    if not value:
-        return []
-    if isinstance(value, str):
-        value = [value]
-    seen: set[str] = set()
-    out: list[str] = []
-    for item in value:
-        item = _clean_str(item).lower()
-        if item and item not in seen:
-            seen.add(item)
-            out.append(item)
-    return out
+def _tokens(text: str) -> list[str]:
+    return [t for t in _WORD_RE.findall(text.lower()) if t not in _STOPWORDS]
 
 
-def normalize_product(raw: dict[str, Any]) -> dict[str, Any]:
-    """Return a normalized copy of a single raw product record.
+def _dedup_key(text: str) -> str:
+    """Order-independent lexical fingerprint of the most salient tokens."""
+    salient = sorted(set(_tokens(text)))
+    return hashlib.sha1(" ".join(salient).encode("utf-8")).hexdigest()[:16]
 
-    The ``source`` field records where the record came from (its 灵感来源 /
-    inspiration source). It is empty for hand-authored sample fixtures and set
-    by the external collectors in :mod:`idea_factory.collect`.
+
+def _pain_statement(raw: dict) -> str:
+    """Lift an abstracted pain statement from a raw record.
+
+    Prefers an explicit ``pain`` field; otherwise falls back to a templated
+    phrasing built from the target user and the title/text.
     """
-    return {
-        "id": _clean_str(raw.get("id")),
-        "name": _clean_str(raw.get("name")),
-        "tagline": _clean_str(raw.get("tagline")),
-        "description": _clean_str(raw.get("description")),
-        "url": _clean_str(raw.get("url")),
-        "categories": _clean_list(raw.get("categories")),
-        "target_users": _clean_list(raw.get("target_users")),
-        "pain_points": _clean_list(raw.get("pain_points")),
-        "launched_at": _clean_str(raw.get("launched_at")),
-        "source": _clean_str(raw.get("source")),
-    }
+    explicit = (raw.get("pain") or "").strip()
+    if explicit:
+        return explicit
+    who = (raw.get("target_user") or "Users").strip()
+    what = (raw.get("title") or raw.get("text") or "").strip()
+    return f"{who} struggle with {what}" if what else ""
 
 
-def normalize_products(raw_records: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Normalize a list of raw product records, skipping entries with no name."""
-    normalized: list[dict[str, Any]] = []
-    for raw in raw_records:
-        record = normalize_product(raw)
-        if record["name"]:
-            normalized.append(record)
-    return normalized
+def normalize_record(raw: dict) -> Signal:
+    source = raw.get("source", SOURCE_EXTERNAL)
+    source_name = raw.get("source_name", source)
+    title = (raw.get("title") or raw.get("text") or "").strip()
+    raw_text = (raw.get("text") or raw.get("title") or "").strip()
+    url = raw.get("url")
+    pain = _pain_statement(raw)
+    fingerprint = pain or title or raw_text
+
+    return Signal(
+        id=_stable_id(source_name, title, url),
+        source=source,
+        source_name=source_name,
+        title=title,
+        raw_text=raw_text,
+        observed_on=raw.get("observed_on") or raw.get("date") or _DEFAULT_DATE,
+        pain_statement=pain,
+        dedup_key=_dedup_key(fingerprint),
+        url=url,
+        category=raw.get("category"),
+        confidence=raw.get("confidence", CONFIDENCE_REAL),
+    )
+
+
+def normalize(records: list[dict]) -> list[Signal]:
+    return [normalize_record(r) for r in records]

@@ -1,6 +1,4 @@
-"""Module entrypoint so ``python -m idea_factory ...`` runs the CLI."""
-
-from __future__ import annotations
+"""Enable ``python -m idea_factory``."""
 
 from .cli import main
 
