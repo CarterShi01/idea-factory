@@ -12,6 +12,9 @@ dependencies = []
 
 [project.optional-dependencies]
 dev = ["pytest>=7.0"]
+# 可选爬虫层：连 Windows VPS 已登录 Chrome（playwright CDP）+ Scrapling 自适应解析。
+# 仅在启用 vps_browser 源时安装：pip install -e '.[stealth]' && playwright install chromium
+stealth = ["scrapling>=0.3", "playwright>=1.40"]
 
 [project.scripts]
 idea-gen = "idea_gen.cli:main"
