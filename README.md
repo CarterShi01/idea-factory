@@ -90,12 +90,15 @@ pack and stops:
 ```bash
 idea-eval --judge-backend cc
 #  ⏸ writes data/llm_jobs/judge-<date>.request.jsonl and pauses
-#  → open Claude Code by hand, judge the whole batch in ONE session,
-#    write data/llm_jobs/judge-<date>.response.jsonl
+#  → in a Claude Code session, run:  /run-llm-batch
+#    (the run-llm-batch skill reads the pack, judges the whole batch in this
+#     session, writes data/llm_jobs/judge-<date>.response.jsonl)
 idea-eval --judge-backend cc        # re-run: resumes from the response pack
 ```
 
-One file = the whole batch = one manual touchpoint. See
+One file = the whole batch = one manual touchpoint. The
+[`/run-llm-batch`](.claude/skills/run-llm-batch/SKILL.md) skill automates the
+fill step inside CC. See
 [`docs/design/llm-abstraction.md`](docs/design/llm-abstraction.md).
 
 ## The three sources (`data/raw/`)
