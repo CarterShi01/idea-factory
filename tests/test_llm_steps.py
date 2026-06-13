@@ -404,6 +404,102 @@ def test_build_request_falls_back_when_env_missing(monkeypatch):
     assert req.model == "fallback-model"
 
 
+# --- P0(3): judge 5-dim sub-scores ---------------------------------------
+
+
+def test_judge_scores_persist_when_all_five_dims_present():
+    ideas = [_high_factor_idea()]
+    evals = evaluate_all(ideas)
+
+    def responder(req):
+        return LLMResponse(
+            id=req.id,
+            data={
+                "verdict": "review",
+                "score": 50,
+                "confidence": "medium",
+                "scores": {
+                    "pain_real": 0.6,
+                    "solo_buildable": 0.4,
+                    "reachable": 0.5,
+                    "defensible": 0.3,
+                    "timing": 0.7,
+                },
+                "respond_to_critique": "ack",
+                "killer_objection": "x",
+                "cheap_experiment": "y",
+            },
+        )
+
+    out = judge_survivors(evals, {"i1": ideas[0]}, MockBackend(responder), {"user_template": "{title}"})
+    e = out[0]
+    assert e.judge_scores == {
+        "pain_real": 0.6,
+        "solo_buildable": 0.4,
+        "reachable": 0.5,
+        "defensible": 0.3,
+        "timing": 0.7,
+    }
+    # avg 0.5 * 100 = 50, top-level = 50 -> no disagreement flag
+    assert not any("自相矛盾" in f for f in e.risk_flags)
+
+
+def test_judge_score_disagreement_flagged():
+    """Top-level score 80 vs 5-dim avg 0.2*100=20 → gap=60 → flag self-contradiction."""
+    ideas = [_high_factor_idea()]
+    evals = evaluate_all(ideas)
+
+    def responder(req):
+        return LLMResponse(
+            id=req.id,
+            data={
+                "verdict": "pursue",
+                "score": 80,
+                "confidence": "high",
+                "scores": {
+                    "pain_real": 0.2,
+                    "solo_buildable": 0.2,
+                    "reachable": 0.2,
+                    "defensible": 0.2,
+                    "timing": 0.2,
+                },
+                "respond_to_critique": "ack",
+                "killer_objection": "x",
+                "cheap_experiment": "y",
+            },
+        )
+
+    out = judge_survivors(evals, {"i1": ideas[0]}, MockBackend(responder), {"user_template": "{title}"})
+    e = out[0]
+    assert any("自相矛盾" in f for f in e.risk_flags)
+
+
+def test_judge_scores_tolerate_partial_dims():
+    """If LLM only fills some sub-dims, we keep what's there and do NOT
+    trigger the self-consistency check (insufficient data)."""
+    ideas = [_high_factor_idea()]
+    evals = evaluate_all(ideas)
+
+    def responder(req):
+        return LLMResponse(
+            id=req.id,
+            data={
+                "verdict": "review",
+                "score": 50,
+                "confidence": "medium",
+                "scores": {"pain_real": 0.8, "solo_buildable": 0.5},
+                "respond_to_critique": "ack",
+                "killer_objection": "x",
+                "cheap_experiment": "y",
+            },
+        )
+
+    out = judge_survivors(evals, {"i1": ideas[0]}, MockBackend(responder), {"user_template": "{title}"})
+    e = out[0]
+    assert e.judge_scores == {"pain_real": 0.8, "solo_buildable": 0.5}
+    assert not any("自相矛盾" in f for f in e.risk_flags)
+
+
 # --- CC handoff (manual mode) raises, never calls CC ----------------------
 
 

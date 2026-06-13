@@ -17,6 +17,17 @@ def write_json(evaluations: list[Evaluation], path: Path) -> None:
 
 _VERDICT_ZH = {PURSUE: "推进", REVIEW: "待验证", KILL: "淘汰"}
 _CONF_ZH = {"high": "高", "medium": "中", "low": "低"}
+_JUDGE_DIM_ZH = {
+    "pain_real": "真实痛",
+    "solo_buildable": "一人可做",
+    "reachable": "可触达",
+    "defensible": "防御性",
+    "timing": "时机",
+}
+
+
+def _judge_score_line(scores: dict[str, float]) -> str:
+    return " · ".join(f"{_JUDGE_DIM_ZH[k]} {scores[k]:.2f}" for k in _JUDGE_DIM_ZH if k in scores)
 
 
 def _factor_line(factors: dict[str, float]) -> str:
@@ -70,7 +81,9 @@ def write_memos(
         ]
         if e.risk_flags:
             lines.append(f"- **风险提示**：{'；'.join(e.risk_flags)}")
-        lines += [f"- **因子**：{_factor_line(e.factors)}", ""]
+        if e.judge_scores:
+            lines.append(f"- **评委五维**：{_judge_score_line(e.judge_scores)}")
+        lines += [f"- **生成侧因子**：{_factor_line(e.factors)}", ""]
 
     if killed:
         lines += ["---", "", "## 被淘汰", ""]

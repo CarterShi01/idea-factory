@@ -33,6 +33,12 @@ KILL = "kill"
 CRITICAL = ("pain_intensity", "build_cost")
 DEFAULT_FLOOR = 0.25
 
+# evl's own 5-dim rubric (judge LLM fills these; not the same as gen-side factors).
+JUDGE_DIMS = ("pain_real", "solo_buildable", "reachable", "defensible", "timing")
+# If top-level score and the avg of judge_scores * 100 disagree by more than this,
+# the judge flagged itself as internally inconsistent.
+SCORE_DISAGREEMENT_GAP = 25.0
+
 # Verdict bands on the 0-100 rubric score (for ideas that pass the kill gate).
 PURSUE_AT = 60.0
 REVIEW_AT = 45.0
@@ -84,6 +90,9 @@ class Evaluation:
     judged_by: str = "rule"          # "rule" or "llm"
     judge_confidence: str = ""       # "high" / "medium" / "low" (LLM self-reported)
     confidence_demoted: bool = False  # True if low-confidence pursue/kill auto-demoted to review
+    # B-step's own 5-dim rubric (not the gen-side factors — investor-style criteria
+    # for the evaluation half: pain_real / solo_buildable / reachable / defensible / timing)
+    judge_scores: dict[str, float] = field(default_factory=dict)
     # B-prep: devil's advocate critique (runs before the judge, separate prompt/call)
     critique: list[str] = field(default_factory=list)
     critique_killer: str = ""
@@ -290,5 +299,20 @@ def judge_survivors(
             if conf == "low" and e.verdict in (PURSUE, KILL):
                 e.verdict = REVIEW
                 e.confidence_demoted = True
+        sub = d.get("scores")
+        if isinstance(sub, dict):
+            e.judge_scores = {
+                name: round(float(sub[name]), 3)
+                for name in JUDGE_DIMS
+                if isinstance(sub.get(name), (int, float))
+            }
+            # Self-consistency: top-level score vs avg of 5 sub-dims should agree.
+            if len(e.judge_scores) == len(JUDGE_DIMS):
+                avg100 = sum(e.judge_scores.values()) / len(JUDGE_DIMS) * 100
+                if abs(avg100 - e.eval_score) > SCORE_DISAGREEMENT_GAP:
+                    e.risk_flags.append(
+                        f"评委自相矛盾：顶层 {e.eval_score:.0f} 分与五维平均 "
+                        f"{avg100:.0f} 分差距过大。"
+                    )
 
     return _sort(evaluations)
