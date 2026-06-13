@@ -12,21 +12,32 @@ description: >-
 
 idea-factory's `cc` backend never calls an LLM API and never invokes Claude Code
 programmatically. Instead it writes a **self-contained request pack** and pauses.
-This skill is the manual half: **you, in this interactive CC session, are the
-model.** You read the pack, do the thinking yourself (this is what spends the Max
-pool, by design), and write the response pack. Then the pipeline resumes.
+This skill is the manual half.
+
+**Who runs this:** a human, directly, inside an interactive Claude Code session.
+It is *not* for OC/Hermes orchestration — it is CC-native and human-invoked.
+**You, this CC session, are the model**: you read the pack, do the generate/judge
+thinking yourself (that is what spends the Max pool, by design), and write the
+response pack. Then the pipeline resumes.
 
 ## Hard rules
 
-- **You are the LLM.** Do the reasoning yourself. Do **not** call any external
-  API, MCP tool, router, or spawn another `claude` — that would defeat the entire
-  point (only manual CC sessions count toward the Max pool).
-- **Process the whole batch in one go.** One pack = one human touchpoint. Do not
+- **Do the core reasoning yourself, in this session — that is the whole point.**
+  Producing the generate/judge answers here is what uses the Max pool. The one
+  thing to avoid: **don't route the core call back through idea-factory's
+  `router` backend** (Tencent `router_chat` / `--backend router` / the
+  `IDEA_LLM_*` endpoint). If you were going to do that, you'd just run
+  `--*-backend router` and skip this skill entirely.
+- **Tools are allowed and encouraged when they help.** Use your normal CC tools
+  (Read / Write / Bash), and other APIs or MCP servers if they genuinely improve
+  an answer (look something up, fetch context). Using tools is still you doing
+  the work manually in CC.
+- **Process the whole batch in one go.** One pack = one human touchpoint. Don't
   stop halfway or ask the user to re-invoke per item.
 - **Conform to each request's `schema` exactly.** The pipeline parses your
   `data` object against it.
 - **Preserve every `id` verbatim.** Responses are matched back by `id`.
-- Touch only `data/llm_jobs/`. Do not edit pipeline code or other data.
+- Touch only `data/llm_jobs/`. Don't edit pipeline code or other data.
 
 ## Input — the request pack
 
@@ -108,5 +119,5 @@ If you genuinely cannot answer one item, emit
   `response.jsonl` covering all items.
 - Keep judgments calibrated to idea-factory's intent: real pain, solo-buildable,
   reachable users; a fatal flaw on any critical dimension → `kill`.
-- The request pack is self-contained — you should not need any file outside
-  `data/llm_jobs/` to answer it.
+- The request pack is self-contained, so you usually won't need anything beyond
+  it — but you may consult other tools/sources if they sharpen a judgment.
