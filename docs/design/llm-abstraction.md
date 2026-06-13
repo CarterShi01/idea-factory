@@ -12,6 +12,13 @@
 谁来填响应，由可插拔的 **Backend** 决定（腾讯 router / CC 当手 / mock）。
 **请求包/响应包的契约不变**，所以"现在自动跑"和"将来 CC 手动跑"是同一套代码、零重写。
 
+> ### ⛔ 硬约束（2026-06-15 起）
+> **绝不允许任何程序化调用 Claude Code**（不准 headless `claude -p`、不准 SDK、不准 bridge/dispatcher 派发）。只有**人在 CC 终端手动交互**才走 Max 池计费。
+> 因此本设计里：
+> - 需要**自动化**的 LLM 步 → 只能走 **`RouterBackend`（腾讯 API，根本不是 CC）**。
+> - 需要**走 CC / Max 池**的步 → 只能走 **`CCHandoffBackend`**：程序只写请求包文件并停下，**由人手动开 CC 处理整批**、写回响应文件，程序再读回续跑。**程序永不调起 CC。**
+> - 无 LLM 的数据准备步走 cron 跑 `idea-gen`（纯 Python，零 token，也不碰 CC）。
+
 ---
 
 ## 1. 设计原则（从 one-creator 提炼）
@@ -22,7 +29,7 @@
 | **只对 Top-K 跑 LLM** | 先用硬规则（因子/kill-gate）把明显的废案砍掉，LLM 只评幸存者。 | eval：先跑零 token 的 `kill-gate` → 只把 survivors 交给 judge(B) |
 | **默认走便宜引擎** | 思考默认走腾讯 LKEAP，绝不误触贵的计费池。 | `RouterBackend` 默认 `tc-code`；提供"引擎守卫"拒绝贵模型 |
 | **结构化输出约束** | prompt 强制只输出 JSON，省掉解释性 token + 免解析。 | `LLMRequest.schema` + 容错 `extract_json` |
-| **CC 是贵资源，默认锁死** | headless `claude -p` 计费，跑批时才临时开，跑完即关。 | `CCHandoffBackend` 不自动调 CC，只产出请求包；由人一次性触发 |
+| **CC 只能手动交互，禁止程序调用** | （硬约束，2026-06-15 起）只有人在 CC 终端里手动交互才走 Max 池计费；任何程序化调用（含 headless `claude -p`、SDK、bridge 派发）一律禁止。 | `CCHandoffBackend` **永不调起 CC**，只产出请求包文件、停下；由人手动开 CC 跑一次、写回响应文件 |
 | **数据提前备好** | 进入 LLM 步之前，所有上下文已落盘成自洽的请求包，人/CC 不用再东拼西凑。 | 请求包 `*.request.jsonl` 是自包含的 |
 
 ---

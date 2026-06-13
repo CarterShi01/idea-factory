@@ -88,6 +88,12 @@ other. Cross-half communication is the `ideas.json` file only.
 - Do not deploy; do not touch secrets, credentials, tokens, billing, or DNS.
 - Do not add real external API calls to the default pipeline without explicit
   human approval (live sources are opt-in, roadmap stage 1+).
+- **Never invoke Claude Code programmatically** (no headless `claude -p`, no SDK,
+  no bridge/dispatcher). As of 2026-06-15 only manual interactive CC sessions
+  count toward the Max pool. The kernel may only reach CC via the file-based
+  `CCHandoffBackend` (write a request pack, stop; a human runs CC by hand and
+  writes the response pack). LLM automation must go through `RouterBackend`
+  (Tencent), which is not CC.
 - High-risk or scope-expanding actions require human approval first.
 
 ## Core design principles (keep these intact)
