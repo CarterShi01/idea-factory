@@ -180,6 +180,35 @@ _REACHABLE = {
 }
 
 
+def _load_founder_reach() -> set[str]:
+    """Augment _REACHABLE with the founder's concrete channels (config/founder.json).
+
+    distribution_fit must stay a *pure* candidate->float function (the two-repo
+    contract). We keep that purity by folding the founder's reach keywords into the
+    module-level vocab **once at import**, not per call — so an idea whose users the
+    founder can actually reach cheaply (security/cloud B2B, 中东硬件出海, 医疗, 蒙语/
+    内蒙古) scores higher, while the function itself stays I/O-free at call time.
+    Best-effort: any failure leaves the default vocab untouched.
+    """
+    import json as _json
+    import os as _os
+    from pathlib import Path as _Path
+
+    extra: set[str] = set()
+    try:
+        p = _Path(_os.environ.get("IDEA_FOUNDER_PROFILE", "config/founder.json"))
+        if p.exists():
+            prof = _json.loads(p.read_text(encoding="utf-8"))
+            for key in ("reach_keywords_en", "reach_keywords_zh"):
+                extra.update(t.lower() for t in (prof.get(key) or []) if isinstance(t, str))
+    except Exception:  # noqa: BLE001 — never let a bad profile break factor import
+        return set()
+    return extra
+
+
+_REACHABLE |= _load_founder_reach()
+
+
 def _count_hits(text: str, vocab: set[str]) -> int:
     return sum(1 for term in vocab if term in text)
 

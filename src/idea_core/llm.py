@@ -308,12 +308,78 @@ def get_backend(name: str | None = None, **kwargs) -> LLMBackend:
 
 
 _CONFIG_DIR = Path(os.environ.get("IDEA_LLM_CONFIG_DIR", "config/llm"))
+# The founder profile sits one level up from the LLM configs (config/founder.json).
+_FOUNDER_PATH = Path(os.environ.get("IDEA_FOUNDER_PROFILE", "config/founder.json"))
 
 
 def load_step_config(step: str, config_dir: str | Path | None = None) -> dict:
     """Load the prompt/schema/params config for a step (e.g. 'generate', 'judge')."""
     path = Path(config_dir or _CONFIG_DIR) / f"{step}.json"
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def load_founder_profile(path: str | Path | None = None) -> dict | None:
+    """Load the founder profile (config/founder.json) if present, else None.
+
+    The profile describes *who will actually build & sell the idea* (skills,
+    capital, network, language/region edge, hard constraints). Optional: absence
+    just means the prompts run founder-agnostic (back-compat).
+    """
+    p = Path(path or _FOUNDER_PATH)
+    if not p.exists():
+        return None
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
+def render_founder_block(profile: dict | None) -> str:
+    """Format the founder profile as a prompt section injected into every step.
+
+    Grounds generation/critique/judge in the real operator: a one-person company
+    must be able to *build it* (capital/skills), *reach the first users* (network),
+    and lean on a *moat* (the Mongolian/Inner-Mongolia language edge). Returns ""
+    when there is no profile so prompts stay unchanged.
+    """
+    if not profile:
+        return ""
+    lines: list[str] = [
+        "# 创始人画像（务必据此判断『这条 idea 适不适合由这位创始人来做』——执行者就是他本人）",
+        f"- 身份：{profile.get('identity', '')}",
+    ]
+    cap = profile.get("capital_rmb")
+    if cap is not None:
+        lines.append(f"- 启动资金：约 {cap} 人民币。{profile.get('capital_note', '')}")
+    for key, header in (
+        ("skills", "技能"),
+        ("network", "可低成本触达的人脉/渠道"),
+        ("language_region_edge", "语言/地域独占优势（护城河）"),
+        ("hard_constraints", "硬约束"),
+        ("anti_fit", "明显不适合他的方向"),
+    ):
+        items = profile.get(key) or []
+        if items:
+            lines.append(f"- {header}：")
+            lines.extend(f"  · {it}" for it in items)
+    lines.append(
+        "判断规则：优先有现成渠道/技能/语言地域优势、且 6 万资金内一人能启动并早期收钱的方向；"
+        "对需要烧钱买量、养团队、长期不赚钱、或他既无技能也无渠道的方向要明确扣分或质疑。"
+    )
+    return "\n".join(lines)
+
+
+# Cached so we read config/founder.json at most once per process.
+_FOUNDER_CACHE: dict | None = None
+_FOUNDER_LOADED = False
+
+
+def _founder_block_cached() -> str:
+    global _FOUNDER_CACHE, _FOUNDER_LOADED
+    if not _FOUNDER_LOADED:
+        _FOUNDER_CACHE = load_founder_profile()
+        _FOUNDER_LOADED = True
+    return render_founder_block(_FOUNDER_CACHE)
 
 
 def build_request(item_id: str, user: str, config: dict) -> LLMRequest:
@@ -324,6 +390,11 @@ def build_request(item_id: str, user: str, config: dict) -> LLMRequest:
     judge run on *different* models (anti self-enhancement) without editing
     config or code. Resolution order: env[model_env] → config.model → backend
     default.
+
+    The founder profile (config/founder.json) is prepended to the system prompt of
+    every step so generation, critique, and judging all reason about whether *this
+    specific founder* can build, reach, and defend the idea. Steps can opt out with
+    ``config['skip_founder'] = true``.
     """
     model = config.get("model")
     env_name = config.get("model_env")
@@ -331,9 +402,16 @@ def build_request(item_id: str, user: str, config: dict) -> LLMRequest:
         env_model = os.environ.get(env_name)
         if env_model:
             model = env_model
+
+    system = config.get("system", "")
+    if not config.get("skip_founder"):
+        block = _founder_block_cached()
+        if block:
+            system = f"{block}\n\n{system}" if system else block
+
     return LLMRequest(
         id=item_id,
-        system=config.get("system", ""),
+        system=system,
         user=user,
         schema=config.get("schema"),
         temperature=config.get("temperature", 0.2),
