@@ -33,6 +33,16 @@ KILL = "kill"
 CRITICAL = ("pain_intensity", "build_cost")
 DEFAULT_FLOOR = 0.25
 
+# Round 2(投资人复评严重度①):伪痛点 / 无证据痛点击杀门。
+# 投资人证据:连续多条复用"独立开发者文档同步"这种编造痛点、"按语音语调判优先级"
+# 纯臆想还能进前列。pain_intensity 因子已按证据强度打分;评估侧在此把『证据极弱的
+# 痛点』判为致命缺陷——这是『高效说不』的价值中心,本轮允许加强。
+# 低于此线视为伪痛点/无证据痛点,直接击杀(独立于通用 floor,门槛更低更"宽容",
+# 只杀真正没有任何证据支撑的那一档)。
+FAKE_PAIN_KILL_AT = 0.15
+# synthetic(模拟人物)痛点要求更高的证据:没有付费/真实信号佐证时,门槛抬高。
+SYNTHETIC_PAIN_KILL_AT = 0.30
+
 # evl's own 5-dim rubric (judge LLM fills these; not the same as gen-side factors).
 JUDGE_DIMS = ("pain_real", "solo_buildable", "reachable", "defensible", "timing")
 # If top-level score and the avg of judge_scores * 100 disagree by more than this,
@@ -119,6 +129,9 @@ def _risk_flags(idea: dict, factors: dict[str, float]) -> list[str]:
     flags: list[str] = []
     if idea.get("confidence") == "synthetic":
         flags.append("基于模拟人物痛点——需要至少 1 条真实信号佐证。")
+    # Round 2(严重度①):痛点证据偏弱(临界)——提醒人审核实痛点是否真实存在。
+    if 0.15 <= factors.get("pain_intensity", 1.0) < 0.4:
+        flags.append("痛点证据偏弱——疑似臆想或与信号关联不强,需核实真实性与付费意愿。")
     if factors.get("competition_density", 1.0) < 0.5:
         flags.append("赛道拥挤——差异化不清晰。")
     if factors.get("moat_signal", 1.0) <= 0.1:
@@ -128,10 +141,25 @@ def _risk_flags(idea: dict, factors: dict[str, float]) -> list[str]:
     return flags
 
 
+def _fake_pain_kill(idea: dict, factors: dict[str, float]) -> bool:
+    """伪痛点 / 无证据痛点判定(Round 2 严重度①)。
+
+    痛点强度极弱 = 痛点编造或与信号无关、没有真实证据支撑。synthetic(模拟人物)
+    痛点用更高门槛,因为它本就需要 ≥1 条真实信号佐证才可信。
+    """
+    pain = factors.get("pain_intensity", 1.0)
+    if idea.get("confidence") == "synthetic":
+        return pain < SYNTHETIC_PAIN_KILL_AT
+    return pain < FAKE_PAIN_KILL_AT
+
+
 def evaluate_idea(idea: dict, floor: float = DEFAULT_FLOOR) -> Evaluation:
     """Evaluate one candidate dict (as produced by idea_gen's ideas.json)."""
     factors = idea.get("factors", {})
     killed_by = [dim for dim in CRITICAL if factors.get(dim, 1.0) < floor]
+    # 伪痛点击杀:即便 pain_intensity 没掉到通用 floor 之下,只要证据极弱也算致命。
+    if _fake_pain_kill(idea, factors) and "pain_intensity" not in killed_by:
+        killed_by.append("pain_intensity")
     score = _rubric_score(factors)
 
     if killed_by:
