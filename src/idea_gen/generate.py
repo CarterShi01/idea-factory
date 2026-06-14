@@ -174,6 +174,10 @@ def _candidates_from_response(signal: Signal, data: dict | None) -> list[IdeaCan
                 mechanism=_first(item, "mechanism", "how", "implementation", "tech"),
                 why_now=_first(item, "why_now", "why_now_not_solved", "differentiation", "why"),
                 mvp_week1=_first(item, "mvp_week1", "mvp", "week1", "first_week"),
+                # ff1 founder-fit: monopoly 三问落进 idea 字段（generate.json 强制要求）。
+                why_only_me=_first(item, "why_only_me", "why_only_him", "founder_edge", "unfair_advantage", "moat_reason"),
+                first_10_customers=_first(item, "first_10_customers", "first_customers", "first_ten_customers", "gtm", "first_10"),
+                copy_fails_because=_first(item, "copy_fails_because", "yc_copy_fails", "why_copy_fails", "copy_fails"),
             )
         )
     # VS 一次出多条 → 基本去重(同信号内近重的候选合并掉，保多样性)。

@@ -135,6 +135,60 @@ def test_distribution_fit_weights_target_user():
     assert distribution_fit(in_target) > distribution_fit(off_target)
 
 
+# --- ff1 founder-fit: distribution_fit = 获客『垄断性』 (投资人评审 ff1) -----------
+
+
+def test_distribution_fit_monopoly_beats_referral_beats_open():
+    # 蒙语/内蒙古区域 = 别人进不来 (高); 安全云引荐 = 别人也能找销售 (中);
+    # 纯开发者社区/公开市场 = 谁都能获客 (低)。这是 ff1 的核心:别人复制能不能拿到同样渠道。
+    monopoly = _candidate(
+        target_user="内蒙古蒙语母语用户",
+        why_only_me="家人在内蒙古、蒙语母语,天然信任渠道别人进不来",
+    )
+    referral = _candidate(
+        target_user="企业安全团队",
+        first_10_customers="经认识的安全厂商销售朋友引荐 3 家企业",
+    )
+    open_only = _candidate(
+        target_user="developers",
+        first_10_customers="发到开发者社区和 product hunt 投放买量",
+    )
+    assert distribution_fit(monopoly) > distribution_fit(referral) > distribution_fit(open_only)
+    assert distribution_fit(monopoly) >= 0.8          # un-copyable channel
+    assert 0.3 <= distribution_fit(referral) <= 0.5   # warm intro band
+
+
+def test_distribution_fit_generic_reach_is_not_a_moat():
+    # Merely reaching developers is something anyone can do -> low, not high.
+    generic = _candidate(target_user="developers and founders")
+    monopoly = _candidate(target_user="内蒙古蒙语用户")
+    assert distribution_fit(generic) < 0.3
+    assert distribution_fit(monopoly) > distribution_fit(generic)
+
+
+# --- ff1 founder-fit: moat rewards language/region, suppresses generic tools -------
+
+
+def test_moat_language_region_exclusivity_scores_high():
+    lang = _candidate(
+        title="面向内蒙古的蒙语政务客服",
+        solution="蒙语母语级理解 + 内蒙古本地信任渠道",
+    )
+    generic_data = _candidate(solution="built on proprietary data")
+    assert moat_signal(lang) > moat_signal(generic_data)
+    assert moat_signal(lang) > 0.5
+
+
+def test_moat_suppresses_generic_weekend_tool():
+    generic = _candidate(
+        title="another slack bot",
+        solution="a generic chrome extension wrapper anyone can build in a weekend",
+    )
+    real = _candidate(solution="proprietary dataset with a strong network effect")
+    assert moat_signal(generic) < moat_signal(real)
+    assert moat_signal(generic) <= 0.2  # weekend-clone tool floored low
+
+
 # --- Round 2: pain evidence (投资人复评严重度① 伪痛点/无证据痛点) ------------
 
 

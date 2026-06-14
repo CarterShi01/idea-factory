@@ -82,6 +82,42 @@ _SPECULATIVE = {
     "或许", "也许", "可能想", "应该会", "如果能", "如果可以", "想象",
     "据我推测", "我觉得用户", "理论上", "假设用户", "说不定", "锦上添花",
 }
+# ff1 founder-fit(投资人评审 ff1：流水线产通用货 2/10）：获客『垄断性』分层词表。
+# distribution_fit 不再问『他能不能触达这批用户』(关键词匹配)，而是问『别人复制了
+# 能不能也拿到同样渠道』。三档:
+#   * 独占渠道(MONOPOLY)——蒙语/内蒙古区域、家人天然信任渠道。别人进不来 → 高分(0.8-0.95)。
+#   * 引荐渠道(REFERRAL)——安全/云 B2B 引荐、医生/心理教授背书、海外硬件渠道。别人也能
+#     找销售/找专家,但他有现成关系 → 中分(0.3-0.5)。
+#   * 公开渠道(OPEN/无)——开发者社区、公开市场、谁都能投放 → 低分。
+# 词表是中英双语,纯子串包含匹配(中文无需词边界)。这些词表也被 moat_signal 复用
+# (语言/区域独占既是渠道垄断、也是创始人最硬的护城河)。
+_CHANNEL_MONOPOLY = {
+    # language / region exclusivity — the founder's hardest-to-copy moat
+    "mongolian", "inner mongolia", "蒙语", "蒙古语", "蒙文", "内蒙古", "内蒙",
+    "蒙汉", "跨蒙", "蒙古族", "小语种",
+    # family / personal trust channel nobody else can replicate
+    "家人", "亲戚", "家乡", "老家", "本地信任", "母语", "native speaker",
+    "family", "hometown",
+}
+_CHANNEL_REFERRAL = {
+    # warm intros the founder has but a competitor could in principle also obtain
+    "引荐", "内推", "转介", "介绍", "背书", "牵线", "人脉", "朋友",
+    "referral", "warm intro", "introduction", "endorsed by", "vouch",
+    # the specific networks he has access to (security/cloud B2B sales, hardware, clinical/psych)
+    "安全厂商", "云厂商", "安全/云", "采购侧", "渠道商",
+    "医生", "临床", "心理学教授", "心理咨询", "咨询师",
+    "海外硬件", "硬件出海", "出海渠道", "中东",
+    "security vendor", "cloud vendor", "enterprise sales", "channel partner",
+    "doctor", "clinician", "psychologist", "therapist",
+}
+# Markers of a purely public / commodity acquisition channel — anyone can buy/post here.
+# Their presence (without a monopoly/referral channel) signals NO unfair distribution.
+_CHANNEL_OPEN = {
+    "developer community", "open market", "paid ads", "buy traffic", "seo",
+    "product hunt", "hacker news", "reddit", "公开市场", "投放", "买量",
+    "开发者社区", "应用商店", "公域流量", "自然流量", "广撒网",
+}
+
 # Real moat by *type* — each distinct type contributes; a candidate that has data
 # moat AND network effects is more defensible than one with a single hint.
 # Round 2(投资人复评严重度②:moat 几乎恒 0.1)。根因:旧词表太窄(只认 "proprietary data"
@@ -117,6 +153,23 @@ _MOAT_DOMAIN = {
     "deep domain", "insider knowledge", "purpose-built for", "battle-tested",
     "垂直", "领域知识", "细分", "专业壁垒", "行业特定", "专有工作流", "护城河",
     "领域经验", "行业洞察", "深耕", "专为",
+}
+# ff1 founder-fit(投资人评审 ff1)：language / region exclusivity is *this founder's*
+# single hardest-to-copy moat (蒙语/内蒙古, 母语级 + 家人信任渠道). The investor
+# explicitly scored it 0.9 ("别人做不了:不懂蒙语/没有本地信任渠道"). It is treated as a
+# distinct, high-value moat type so an idea杠杆其语言/区域独占 clears far above generic
+# tools. Reuses the channel-monopoly vocab plus a few moat-phrasing terms.
+_MOAT_LANG_REGION = _CHANNEL_MONOPOLY | {
+    "language barrier", "regional monopoly", "local trust", "区域独占",
+    "语言壁垒", "母语优势", "本地化壁垒", "信任壁垒",
+}
+# Generic-tool markers: a 周末就能抄完的通用工具(套壳/通用 bot/插件)has, by definition,
+# no founder moat. Their presence (without a real moat type) damps the score so通用货
+# can't ride the floor into the top ranks (投资人:moat 0.1-0.44 还能排前列 = 没在筛壁垒).
+_GENERIC_TOOL = {
+    "slack bot", "chrome extension", "browser extension", "wrapper", "boilerplate",
+    "generic", "another", "clone", "anyone can build", "weekend project",
+    "no-code clone", "通用工具", "套壳", "谁都能做", "周末就能做", "插件", "通用",
 }
 # Hints of a crowded, undifferentiated space. Graded by how commodity it is.
 _COMMODITY = {  # near-zero differentiation, heavy penalty
@@ -417,7 +470,25 @@ def moat_signal(c: IdeaCandidate) -> float:
     # is a small tie-breaker so within-type richness still moves the score.
     breadth = _saturating(types_present, half=1.5)
     intensity = _saturating(total_hits, half=3.0)
-    return round(0.1 + 0.78 * breadth + 0.12 * intensity, 4)
+    score = 0.1 + 0.6 * breadth + 0.1 * intensity
+
+    # ff1 founder-fit: language/region exclusivity is the founder's strongest moat —
+    #杠杆其蒙语/内蒙古区域独占 lifts the score hard (the investor scored it ~0.9),
+    # well above any generic data/integration hint.
+    if _has_any(text, _MOAT_LANG_REGION):
+        lr = _saturating(_count_hits(text, _MOAT_LANG_REGION), half=1.5)
+        score += 0.6 * lr
+
+    # ff1 founder-fit: a generic, copy-in-a-weekend tool (套壳/通用 bot/插件) with no
+    # real moat type is suppressed so通用货 can't ride the floor into the top ranks.
+    if _has_any(text, _GENERIC_TOOL) and not _has_any(text, _MOAT_LANG_REGION):
+        generic = _saturating(_count_hits(text, _GENERIC_TOOL), half=2.0)
+        # Only the floor survives when there's no genuine moat; a real moat type
+        # (data/network/integration/domain) softens but doesn't erase the penalty.
+        damp = 0.35 if types_present == 0 else 0.18
+        score -= damp * generic
+
+    return round(max(0.05, min(1.0, score)), 4)
 
 
 def competition_density(c: IdeaCandidate) -> float:
@@ -437,15 +508,51 @@ def competition_density(c: IdeaCandidate) -> float:
 
 
 def distribution_fit(c: IdeaCandidate) -> float:
-    """Can this founder reach these users? Higher = more reachable.
+    """Acquisition *monopoly*, not mere reachability. Higher = harder for a copier
+    to obtain the same channel.
 
-    Saturating over reachable-audience mentions (weighting target_user double,
-    since that's the primary channel signal). Spread, not binary.
+    ff1 founder-fit(投资人评审 ff1)：the old version was plain keyword matching
+    ('can he reach these users?') — but reaching developers is something *anyone*
+    can do, so it rewarded generic SaaS. The investor's prescription: score
+    **获客垄断性** — "别人复制了能不能也拿到同样渠道". Three tiers:
+
+    * **monopoly channel** (蒙语/内蒙古区域、家人信任渠道) → 0.8-0.95. Nobody else
+      can get in; this is the founder's unfair, un-copyable distribution.
+    * **referral channel** (安全/云 B2B 引荐、医生/心理教授背书、海外硬件渠道) → ~0.3-0.5.
+      He has a warm intro, but a competitor could also find a salesperson/expert.
+    * **public / no channel** (开发者社区、公开市场、买量) → low floor. Anyone can
+      post/buy here; there is no unfair distribution at all.
+
+    The monopoly tier dominates: a single monopoly mention beats any amount of
+    referral, and an idea relying purely on open channels is floored. ``why_only_me``
+    / ``first_10_customers`` (folded into ``text()``) are where this language lives.
     """
-    user_hits = 2 * _count_hits((c.target_user or "").lower(), _REACHABLE)
-    body_hits = _count_hits(c.text(), _REACHABLE)
-    hits = user_hits + body_hits
-    return round(0.1 + 0.85 * _saturating(hits, half=2.5), 4)
+    blob = c.text()
+    target = (c.target_user or "").lower()
+
+    # Monopoly channel: weight target_user double (it's the strongest channel signal).
+    mono = 2 * _count_hits(target, _CHANNEL_MONOPOLY) + _count_hits(blob, _CHANNEL_MONOPOLY)
+    referral = 2 * _count_hits(target, _CHANNEL_REFERRAL) + _count_hits(blob, _CHANNEL_REFERRAL)
+    # Fallback: legacy reachable-audience keywords still count as a *weak* referral-ish
+    # signal (he can reach developers/founders/etc.), but never as monopoly.
+    reach = _count_hits(target, _REACHABLE) + _count_hits(blob, _REACHABLE)
+    open_only = _count_hits(blob, _CHANNEL_OPEN)
+
+    if mono:
+        # Un-copyable distribution: high band, saturating with how strongly it's stated.
+        return round(0.8 + 0.15 * _saturating(mono, half=2.0), 4)
+    if referral:
+        # Warm-intro band: real edge but copyable → mid (0.3-0.5).
+        return round(0.3 + 0.2 * _saturating(referral, half=2.0), 4)
+    if reach:
+        # Only generic reachable audience, no founder channel → low (commodity reach).
+        # An explicit public/commodity channel drags it toward the floor.
+        base = 0.15 + 0.1 * _saturating(reach, half=3.0)
+        if open_only:
+            base -= 0.05 * _saturating(open_only, half=2.0)
+        return round(max(0.05, base), 4)
+    # No channel signal of any kind: bottom floor (un-validated, no unfair distribution).
+    return round(0.08 if not open_only else 0.05, 4)
 
 
 # Registry: name -> pure factor function. Iterate this everywhere so the set of

@@ -146,6 +146,14 @@ def _risk_flags(idea: dict, factors: dict[str, float]) -> list[str]:
         flags.append("没有明显护城河。")
     if factors.get("build_cost", 1.0) < 0.5:
         flags.append("对一人公司来说工程量偏重。")
+    # ff1 founder-fit(投资人评审 ff1：流水线产通用货 2/10）：『通用货』降级旗。
+    # 无独占渠道(distribution_fit 低=没有别人拿不到的获客)且无护城河(moat 低=周末能抄)
+    # = 换成任何全栈程序员成功率不变。评估侧『高效说不』正是价值中心,把这类显式标出。
+    if factors.get("distribution_fit", 1.0) < 0.3 and factors.get("moat_signal", 1.0) < 0.3:
+        flags.append(
+            "通用货——无创始人独占渠道(谁都能获客)且无护城河(周末能抄),"
+            "换成任何全栈程序员成功率不变;不杠杆其语言/区域/人脉独占优势,建议降级。"
+        )
     return flags
 
 
@@ -219,6 +227,12 @@ def _survivor_fields(e: Evaluation, idea: dict) -> dict:
         "target_user": idea.get("target_user", ""),
         "factors": json.dumps(e.factors, ensure_ascii=False),
         "confidence": e.confidence,
+        # ff1 founder-fit: surface the generator's monopoly claims so the critic/judge
+        # can attack them directly ("你说只有你能做,但这条用不上蒙语/没有那条引荐").
+        # render_template ignores unused placeholders, so existing prompts are unaffected.
+        "why_only_me": idea.get("why_only_me", ""),
+        "first_10_customers": idea.get("first_10_customers", ""),
+        "copy_fails_because": idea.get("copy_fails_because", ""),
     }
 
 

@@ -80,6 +80,18 @@ def test_no_payment_evidence_raises_risk_flag():
     assert not any("付费证据" in f for f in e2.risk_flags)
 
 
+def test_generic_idea_raises_founder_fit_flag():
+    # ff1 founder-fit:无独占渠道 + 无护城河 = 通用货,换成任何全栈程序员成功率不变。
+    e = evaluate_idea(_idea(distribution_fit=0.1, moat_signal=0.1))
+    assert any("通用货" in f for f in e.risk_flags)
+    # 有独占渠道(高 distribution_fit)的不触发该旗。
+    e2 = evaluate_idea(_idea(distribution_fit=0.9, moat_signal=0.1))
+    assert not any("通用货" in f for f in e2.risk_flags)
+    # 有护城河的也不触发。
+    e3 = evaluate_idea(_idea(distribution_fit=0.1, moat_signal=0.9))
+    assert not any("通用货" in f for f in e3.risk_flags)
+
+
 def test_payment_signal_lifts_rubric_score():
     # Stronger paid demand => higher eval_score, all else equal.
     weak = evaluate_idea(_idea(payment_signal=0.1))
