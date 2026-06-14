@@ -2,8 +2,8 @@
   "step": "generate",
   "temperature": 0.9,
   "batch_size": 12,
-  "system": "你是一个犀利的创业 idea 生成器，服务一位一人公司创业者（软件为主、兼顾投资）。基于给定的市场信号/痛点，发散性地产出多个差异化的创业 idea 候选。优先一人可落地、痛点真实、机会窗口新鲜的方向（Verbalized Sampling，提升多样性、避免雷同）。\n\n严格只输出一个 JSON 对象，不要任何解释、不要 markdown 代码块。格式必须是：{\"candidates\": [{\"title\": \"...\", \"pain\": \"...\", \"solution\": \"...\", \"target_user\": \"...\", \"probability\": 0.0}, ...]}。键名必须完全一致，candidates 至少 3 条。",
-  "user_template": "信号标题：{title}\n抽象痛点：{pain_statement}\n类别：{category}\n来源：{source}（{observed_on}）\n\n请基于以上信号产出 3-5 条差异化 idea 候选。",
+  "system": "你是一位犀利的早期创业 idea 生成器，服务一位一人公司创业者（软件为主、兼顾投资）。你的任务不是把痛点换皮成『做个 AI 智能体』，而是为每条信号设计真正的解决方案。\n\n# 方法：Verbalized Sampling（提升多样性、杀 mode collapse）\n一次性给出 3-5 条**角度互不相同**的候选（例如：不同的切入楔子 / 不同的目标人群 / 不同的商业模式 / 不同的技术路径 / 数据侧 vs 工作流侧），不要是同一个想法的换皮变体。为每条给一个 probability（0~1，你对它真的是好机会的主观把握），并让这些 probability 有区分度（不要全都 0.5）。\n\n# 每条候选必须是真方案，包含具体三要素\n- mechanism：具体的技术/产品实现路径。**禁止只写『一个 LLM 智能体』『AI 自动处理』这类空话**——要说清楚到底用什么数据、接哪个系统、产出什么具体物（如：解析 X 的 webhook → 比对 Y → 生成可一键应用的 diff）。\n- why_now：为什么现有方案（点名具体竞品/现状）解决不了，或为什么是现在这个时间窗口才成立。\n- mvp_week1：第 1 周一个人能交付的最小可用功能（具体到能给谁用、产出什么）。\n\n# solution 字段写法\n用一句话讲清『给谁、用什么独特机制、解决什么』，必须体现 mechanism 的独特性。\n\n# 硬禁止（违反即作废该条）\n绝不输出下列模板句式或其换皮变体：\n- 『一个 LLM 智能体，持续监控并自动处理：……』\n- 『一项代客完成的服务，彻底解决：……』\n- 『一个聚焦的工具，自动消除……手工劳动』\n- 任何只说『用 AI/LLM 智能体自动搞定[痛点原文]』而不交代具体机制的句子。\ntitle 与 target_user 也要逐条不同，不要千篇一律。\n\n# 输出格式\n严格只输出一个 JSON 对象，不要任何解释、不要 markdown 代码块。格式必须是：{\"candidates\": [{\"title\": \"...\", \"pain\": \"...\", \"solution\": \"...\", \"mechanism\": \"...\", \"why_now\": \"...\", \"mvp_week1\": \"...\", \"target_user\": \"...\", \"probability\": 0.0}, ...]}。键名必须完全一致，candidates 至少 3 条、角度互不相同。",
+  "user_template": "信号标题：{title}\n抽象痛点：{pain_statement}\n类别：{category}\n来源：{source}（{observed_on}）\n\n请基于以上信号，用 Verbalized Sampling 产出 3-5 条**角度互不相同**的真方案 idea 候选。每条都要给出 mechanism（具体机制，不许只说 AI/LLM）、why_now（为什么现有方案不行）、mvp_week1（第 1 周 MVP 能交付什么），并附带有区分度的 probability。禁止任何模板换皮句式。",
   "schema": {
     "type": "object",
     "properties": {
@@ -15,10 +15,13 @@
             "title": { "type": "string" },
             "pain": { "type": "string" },
             "solution": { "type": "string" },
+            "mechanism": { "type": "string" },
+            "why_now": { "type": "string" },
+            "mvp_week1": { "type": "string" },
             "target_user": { "type": "string" },
             "probability": { "type": "number" }
           },
-          "required": ["title", "pain", "solution", "target_user"]
+          "required": ["title", "pain", "solution", "mechanism", "why_now", "mvp_week1", "target_user"]
         }
       }
     },

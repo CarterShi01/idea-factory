@@ -20,13 +20,29 @@ from typing import Callable
 from idea_core.llm import LLMBackend, build_request, render_template
 from idea_core.models import IdeaCandidate, Signal
 
-# Each template turns a pain into a differently-angled solution. Keeping a small
-# fixed set makes generation deterministic and reproducible for the demo.
-# 中文文案：面向中文用户。
-_SOLUTION_TEMPLATES: list[tuple[str, str]] = [
-    ("工具", "一个聚焦的工具，自动消除以下痛点背后的手工劳动：{pain}"),
-    ("智能体", "一个 LLM 智能体，持续监控并自动处理：{pain}"),
-    ("服务", "一项代客完成的服务，彻底解决：{pain}"),
+from .dedup import _token_set, jaccard
+
+# Rule path 是离线、零 token 的占位生成器：真 ideation 在 LLM 路径(generate_llm)。
+# Round 1(投资人评审严重度①⑤)：删掉了写死的『一个 LLM 智能体，持续监控并自动处理:[痛点]』
+# 换皮模板——它正是 mode collapse 的源头。改成几个**不同切入角度**的脚手架，并强制
+# 每条带上 mechanism/why_now/mvp_week1 三要素的具体占位(虽弱于 LLM，但不再是换皮)。
+# 每个角度给出 (angle 名, 切入说明, 第1周MVP 形态) —— 角度互不相同以保留多样性。
+_RULE_ANGLES: list[tuple[str, str, str]] = [
+    (
+        "工作流嵌入",
+        "把处理动作直接嵌进用户已有的工作流(IDE/邮箱/工单系统)，在痛点发生的那一刻就地给出可一键应用的结果，而不是另开一个新工具",
+        "一个挂在现有工具上的插件/钩子，对单一高频场景给出可一键采纳的具体产出",
+    ),
+    (
+        "数据/对账侧",
+        "抓取并比对该场景两侧的结构化数据(如系统记录 vs 实际状态)，把人工核对变成可解释的差异清单",
+        "一个读两份数据源、输出带证据的差异报告的脚本",
+    ),
+    (
+        "决策辅助",
+        "不替用户做，而是把分散信息聚成一页可对比的决策视图，缩短『我该怎么办』的判断时间",
+        "一个汇总输入、产出一页对比/建议视图的只读看板",
+    ),
 ]
 
 _DEFAULT_USER = "软件开发者与独立创业者"
@@ -49,21 +65,25 @@ def _rule_based_backend(signal: Signal) -> list[IdeaCandidate]:
         return []
     user = _target_user(signal)
     candidates: list[IdeaCandidate] = []
-    for idx, (angle, template) in enumerate(_SOLUTION_TEMPLATES):
+    for idx, (angle, mechanism, mvp) in enumerate(_RULE_ANGLES):
         candidates.append(
             IdeaCandidate(
                 id=f"{signal.id}-{idx}",
                 signal_id=signal.id,
                 source=signal.source,
-                title=f"面向「{signal.title}」的{angle}"[:120],
+                title=f"面向「{signal.title}」的{angle}方案"[:120],
                 pain=pain,
-                solution=template.format(pain=pain),
+                # No more 换皮模板：solution 体现该角度的具体机制，而非套『AI 智能体处理痛点』。
+                solution=f"针对「{pain}」，采用「{angle}」路径：{mechanism}。",
                 target_user=user,
                 observed_on=signal.observed_on,
                 confidence=signal.confidence,
                 category=signal.category,
                 trend_status=signal.trend_status,
                 growth_speed=signal.growth_speed,
+                mechanism=mechanism,
+                why_now="离线规则路径未做竞品核查；请在 idea-eval（或 LLM 生成）阶段验证现有方案为何不足。",
+                mvp_week1=mvp,
             )
         )
     return candidates
@@ -132,9 +152,38 @@ def _candidates_from_response(signal: Signal, data: dict | None) -> list[IdeaCan
                 category=signal.category,
                 trend_status=signal.trend_status,
                 growth_speed=signal.growth_speed,
+                # Round 1 真方案三要素：消化 VS 输出，落进 idea 字段。
+                mechanism=_first(item, "mechanism", "how", "implementation", "tech"),
+                why_now=_first(item, "why_now", "why_now_not_solved", "differentiation", "why"),
+                mvp_week1=_first(item, "mvp_week1", "mvp", "week1", "first_week"),
             )
         )
-    return out
+    # VS 一次出多条 → 基本去重(同信号内近重的候选合并掉，保多样性)。
+    return _dedupe_candidates(out)
+
+
+# Round 1: Verbalized Sampling 一次给多条候选，需做基本去重后纳入候选池。
+# 用与信号去重相同的词法 Jaccard(idea_gen.dedup)，对**同一信号**产出的候选去近重，
+# 这样 mode-collapse 的换皮变体(措辞略改、实质相同)会被合并，保留真正不同角度的。
+_CAND_DEDUP_THRESHOLD = 0.85
+
+
+def _dedupe_candidates(candidates: list[IdeaCandidate]) -> list[IdeaCandidate]:
+    """Drop near-duplicate candidates by lexical Jaccard over their text().
+
+    Keeps insertion order; first occurrence wins. Operates within whatever list
+    it's given (callers pass per-signal batches), so it never collapses ideas
+    that legitimately came from different signals.
+    """
+    kept: list[IdeaCandidate] = []
+    kept_tokens: list[set[str]] = []
+    for c in candidates:
+        tokens = _token_set(c.text())
+        if any(jaccard(tokens, prev) >= _CAND_DEDUP_THRESHOLD for prev in kept_tokens):
+            continue
+        kept.append(c)
+        kept_tokens.append(tokens)
+    return kept
 
 
 def generate_llm(signals: list[Signal], llm: LLMBackend, config: dict) -> list[IdeaCandidate]:

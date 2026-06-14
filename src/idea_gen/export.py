@@ -50,6 +50,15 @@ def write_markdown(
             "",
             f"- **痛点**：{c.pain}",
             f"- **方案**：{c.solution}",
+        ]
+        # Round 1 真方案三要素：仅在有内容时展示(rule/旧数据可能为空)。
+        if getattr(c, "mechanism", ""):
+            lines.append(f"- **机制**：{c.mechanism}")
+        if getattr(c, "why_now", ""):
+            lines.append(f"- **为何现在/现有方案不足**：{c.why_now}")
+        if getattr(c, "mvp_week1", ""):
+            lines.append(f"- **第 1 周 MVP**：{c.mvp_week1}")
+        lines += [
             f"- **目标用户**：{c.target_user}",
             f"- **来源**：{c.source}（{c.observed_on}）· 衰减 {s.decay:.2f}",
             f"- **因子**：{_factor_line(s.factors)}",

@@ -67,10 +67,22 @@ class IdeaCandidate:
     category: str | None = None
     trend_status: str = "steady"  # 从来源 Signal 透传，供 market_freshness 因子使用
     growth_speed: float = 0.0
+    # Round-1 真方案三要素（投资人评审严重度①⑤：模板填空 + mode collapse）。
+    # 新增字段、向后兼容：旧 ideas.json 缺这几个键时反序列化用默认空值即可。
+    mechanism: str = ""    # 具体技术/产品实现路径，不能只说 "AI/LLM 智能体"
+    why_now: str = ""      # 为什么现有方案解决不了 / 为什么是现在的机会窗口
+    mvp_week1: str = ""    # 第 1 周 MVP 能交付的最小可用功能
 
     def text(self) -> str:
         """Concatenated lowercase text, used by factors and dedup."""
-        parts = [self.title, self.pain, self.solution, self.target_user, self.category or ""]
+        parts = [
+            self.title,
+            self.pain,
+            self.solution,
+            self.target_user,
+            self.mechanism,
+            self.category or "",
+        ]
         return " ".join(p for p in parts if p).lower()
 
     def to_dict(self) -> dict:
