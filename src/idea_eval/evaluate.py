@@ -55,13 +55,16 @@ REVIEW_AT = 45.0
 
 # evl's own rubric weights (same factor names as idea_core; evl owns its
 # emphasis). Pain and solo-buildability carry the most weight.
+# Round 2(投资人复评严重度④):纳入 payment_signal——真实付费意愿是评估侧最该奖励的
+# 证据(round1:『有人正在花钱解决』=最强信号)。权重和保持 1.0。
 RUBRIC_WEIGHTS = {
-    "pain_intensity": 0.30,
-    "build_cost": 0.20,
-    "distribution_fit": 0.18,
-    "market_freshness": 0.14,
-    "competition_density": 0.10,
-    "moat_signal": 0.08,
+    "pain_intensity": 0.28,
+    "payment_signal": 0.18,
+    "build_cost": 0.18,
+    "distribution_fit": 0.14,
+    "market_freshness": 0.10,
+    "competition_density": 0.06,
+    "moat_signal": 0.06,
 }
 
 # 最危险假设 / 最小验证实验的中文文案模板。
@@ -72,6 +75,7 @@ _ASSUMPTION = {
     "market_freshness": "假设机会窗口还开着——这个方向可能已经不新鲜了。",
     "competition_density": "假设还有差异化空间——但赛道看起来已经拥挤。",
     "moat_signal": "假设你能建立护城河——但防御性尚不清晰。",
+    "payment_signal": "假设真有人愿意为此付费——目前没有可信的付费证据。",
 }
 _EXPERIMENT = {
     "pain_intensity": "做 5 场问题访谈 + 在 3 个社群发帖描述痛点；看是否有人主动说“我愿意付费”。（1 周，0 元）",
@@ -80,6 +84,7 @@ _EXPERIMENT = {
     "market_freshness": "查近 90 天搜索/HN/GitHub 趋势；确认是在上升而非已见顶。（半天，0 元）",
     "competition_density": "注册排名前 3 的竞品；记录你要切入的那个差距。（2 天，<100 元）",
     "moat_signal": "明确一个能锁住用户的工作流或数据资产；找 3 个用户验证。（3 天，0 元）",
+    "payment_signal": "拿一个假落地页 + 价格,投 50 个目标用户,看有几个点『立即购买/预付』。（1 周，<100 元）",
 }
 
 
@@ -132,6 +137,9 @@ def _risk_flags(idea: dict, factors: dict[str, float]) -> list[str]:
     # Round 2(严重度①):痛点证据偏弱(临界)——提醒人审核实痛点是否真实存在。
     if 0.15 <= factors.get("pain_intensity", 1.0) < 0.4:
         flags.append("痛点证据偏弱——疑似臆想或与信号关联不强,需核实真实性与付费意愿。")
+    # Round 2(严重度④):无可信付费证据——警惕『买过课程≈愿付费』式的编造付费信号。
+    if factors.get("payment_signal", 1.0) < 0.2:
+        flags.append("无可信付费证据——没有人在为此真实付费/雇人,付费意愿待验证(警惕无关付费谬误)。")
     if factors.get("competition_density", 1.0) < 0.5:
         flags.append("赛道拥挤——差异化不清晰。")
     if factors.get("moat_signal", 1.0) <= 0.1:

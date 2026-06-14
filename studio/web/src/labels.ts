@@ -9,6 +9,7 @@ export const FACTOR_LABEL: Record<string, string> = {
   moat_signal: "护城河",
   competition_density: "竞争稀缺度",
   distribution_fit: "触达匹配度",
+  payment_signal: "付费信号",
 };
 
 export const VERDICT_LABEL: Record<Verdict, string> = {

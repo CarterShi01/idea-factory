@@ -18,7 +18,13 @@ from __future__ import annotations
 from typing import Callable
 
 from idea_core.llm import LLMBackend, build_request, render_template
-from idea_core.models import IdeaCandidate, Signal
+from idea_core.models import (
+    CONFIDENCE_REAL,
+    CONFIDENCE_SYNTHETIC,
+    SOURCE_PERSONA,
+    IdeaCandidate,
+    Signal,
+)
 
 from .dedup import _token_set, jaccard
 
@@ -102,13 +108,25 @@ def generate(signals: list[Signal], backend: Backend = _rule_based_backend) -> l
 # --- A: LLM generation backend -------------------------------------------
 
 
-def _signal_fields(signal: Signal) -> dict:
+def _source_guidance(signal: Signal, config: dict) -> str:
+    """Per-source generation guidance (Round 3 三源融合, 投资人复评 #2).
+
+    external_event / brain_inbox / pain_persona get *different* instructions so a
+    brain-inbox idea isn't generated the same way as an external event. Falls back
+    to the ``default`` entry for unknown sources / configs without the map.
+    """
+    table = config.get("source_guidance") or {}
+    return table.get(signal.source) or table.get("default", "")
+
+
+def _signal_fields(signal: Signal, config: dict | None = None) -> dict:
     return {
         "title": signal.title,
         "pain_statement": signal.pain_statement,
         "category": signal.category or "",
         "source": signal.source,
         "observed_on": signal.observed_on,
+        "source_guidance": _source_guidance(signal, config or {}),
     }
 
 
@@ -189,15 +207,32 @@ def _dedupe_candidates(candidates: list[IdeaCandidate]) -> list[IdeaCandidate]:
 def generate_llm(signals: list[Signal], llm: LLMBackend, config: dict) -> list[IdeaCandidate]:
     """LLM (A) backend: one batched request per signal, a single complete() call.
 
+    Round 3(三源融合护城河,投资人复评 #2 + mission):
+      * **per-source generation** — each signal's request carries a source-specific
+        guidance block (external = timing/validated demand, brain = contrarian
+        founder insight, persona = hypothesis needing corroboration);
+      * **cross-source fusion** — signals from *different* sources that cluster onto
+        the same theme (lexical Jaccard, no embeddings) get an extra fusion request
+        whose candidates are tagged with ``fusion_sources``.
+
+    Both the per-source requests and the fusion requests go into a SINGLE
+    ``complete()`` call (batch-first contract).
+
     May raise ``idea_core.llm.PendingHandoff`` when the backend is CC-handoff and
     the response pack isn't ready yet -- callers should let it propagate to the CLI.
     """
     template = config.get("user_template", "")
-    requests = [
-        build_request(s.id, render_template(template, _signal_fields(s)), config)
+    per_signal = [
+        build_request(s.id, render_template(template, _signal_fields(s, config)), config)
         for s in signals
     ]
-    responses = llm.complete(requests)
+
+    # Build cross-source fusion requests (may be empty if no multi-source clusters).
+    clusters = _cross_source_clusters(signals)
+    fusion_cfg = config.get("fusion") or {}
+    fusion_requests = _fusion_requests(clusters, fusion_cfg) if fusion_cfg else []
+
+    responses = llm.complete(per_signal + fusion_requests)
     by_id = {r.id: r for r in responses}
 
     candidates: list[IdeaCandidate] = []
@@ -205,4 +240,117 @@ def generate_llm(signals: list[Signal], llm: LLMBackend, config: dict) -> list[I
         r = by_id.get(s.id)
         if r and r.ok:
             candidates.extend(_candidates_from_response(s, r.data))
+
+    # Fold in fusion candidates, tagged with their contributing source types.
+    for cluster in clusters:
+        r = by_id.get(_fusion_id(cluster))
+        if r and r.ok:
+            candidates.extend(_fusion_candidates_from_response(cluster, r.data))
+
     return candidates
+
+
+# --- Round 3: cross-source fusion (mission 护城河) -------------------------
+
+# 两条来自不同源的信号,词法 Jaccard ≥ 此阈值即视为指向同一主题,触发融合。
+# 比候选去重的 0.85 低很多:融合要的是"沾边同主题"而非"近乎重复"。
+_FUSION_THRESHOLD = 0.2
+
+
+def _signal_tokens(s: Signal) -> set[str]:
+    return _token_set(f"{s.title} {s.pain_statement} {s.category or ''}")
+
+
+def _cross_source_clusters(signals: list[Signal]) -> list[list[Signal]]:
+    """Group signals into themes that span ≥2 distinct sources (greedy, stdlib).
+
+    Single-link clustering by lexical Jaccard over title+pain+category. A cluster
+    is only returned if it draws on **more than one source type** — same-source
+    near-dupes are already handled by dedup; fusion is specifically about
+    cross-source chemistry (external timing + brain insight + persona pain).
+    Deterministic: input order drives assignment.
+    """
+    tokens = [_signal_tokens(s) for s in signals]
+    n = len(signals)
+    cluster_of = [-1] * n
+    clusters: list[list[int]] = []
+
+    for i in range(n):
+        if cluster_of[i] != -1:
+            continue
+        cluster_of[i] = len(clusters)
+        members = [i]
+        for j in range(i + 1, n):
+            if cluster_of[j] != -1:
+                continue
+            if any(jaccard(tokens[j], tokens[k]) >= _FUSION_THRESHOLD for k in members):
+                cluster_of[j] = len(clusters)
+                members.append(j)
+        clusters.append(members)
+
+    out: list[list[Signal]] = []
+    for members in clusters:
+        sigs = [signals[k] for k in members]
+        if len({s.source for s in sigs}) >= 2:
+            out.append(sigs)
+    return out
+
+
+def _fusion_id(cluster: list[Signal]) -> str:
+    return "fusion-" + "+".join(s.id for s in cluster)
+
+
+def _fusion_sources(cluster: list[Signal]) -> list[str]:
+    # Distinct source types, in first-seen order (stable).
+    seen: list[str] = []
+    for s in cluster:
+        if s.source not in seen:
+            seen.append(s.source)
+    return seen
+
+
+def _fusion_theme(cluster: list[Signal]) -> str:
+    # A short human-readable theme label = the shortest title in the cluster.
+    titles = [s.title for s in cluster if s.title]
+    return min(titles, key=len) if titles else "(混合主题)"
+
+
+def _fusion_bundle(cluster: list[Signal]) -> str:
+    lines = []
+    for s in cluster:
+        lines.append(
+            f"- [来源:{s.source}] 标题:{s.title}｜痛点:{s.pain_statement or '(无)'}"
+            f"｜类别:{s.category or '-'}｜时间:{s.observed_on}"
+        )
+    return "\n".join(lines)
+
+
+def _fusion_requests(clusters: list[list[Signal]], fusion_cfg: dict):
+    template = fusion_cfg.get("user_template", "")
+    requests = []
+    for cluster in clusters:
+        user = render_template(
+            template,
+            {"theme": _fusion_theme(cluster), "bundle": _fusion_bundle(cluster)},
+        )
+        requests.append(build_request(_fusion_id(cluster), user, fusion_cfg))
+    return requests
+
+
+def _fusion_candidates_from_response(cluster: list[Signal], data: dict | None) -> list[IdeaCandidate]:
+    """Parse a fusion response, tagging each candidate with fusion_sources.
+
+    The lead signal (cluster[0]) supplies id prefix / observed_on; confidence is
+    forced to REAL only if at least one *non-persona* source backs the cluster,
+    otherwise it stays SYNTHETIC (a fusion built purely on persona pain is still
+    synthetic — the ≥1-real-corroboration rule).
+    """
+    lead = cluster[0]
+    cands = _candidates_from_response(lead, data)
+    sources = _fusion_sources(cluster)
+    has_real = any(s.source != SOURCE_PERSONA for s in cluster)
+    for idx, c in enumerate(cands):
+        c.id = f"{_fusion_id(cluster)}-{idx}"
+        c.fusion_sources = list(sources)
+        c.confidence = CONFIDENCE_REAL if has_real else CONFIDENCE_SYNTHETIC
+    return cands

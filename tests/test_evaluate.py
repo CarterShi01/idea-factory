@@ -15,6 +15,7 @@ def _idea(**factors):
         "moat_signal": 1.0,
         "competition_density": 1.0,
         "distribution_fit": 1.0,
+        "payment_signal": 1.0,
     }
     base.update(factors)
     return {"id": "i1", "title": "demo", "confidence": "real", "factors": base}
@@ -68,6 +69,22 @@ def test_synthetic_pain_held_to_higher_evidence_bar():
 def test_weak_pain_evidence_raises_risk_flag():
     e = evaluate_idea(_idea(pain_intensity=0.3))
     assert any("痛点证据偏弱" in f for f in e.risk_flags)
+
+
+def test_no_payment_evidence_raises_risk_flag():
+    # Round 2(严重度④):无可信付费证据 -> 风险旗(反『买课≈付费』编造)。
+    e = evaluate_idea(_idea(payment_signal=0.12))
+    assert any("付费证据" in f for f in e.risk_flags)
+    # A well-paid idea does not raise the flag.
+    e2 = evaluate_idea(_idea(payment_signal=0.8))
+    assert not any("付费证据" in f for f in e2.risk_flags)
+
+
+def test_payment_signal_lifts_rubric_score():
+    # Stronger paid demand => higher eval_score, all else equal.
+    weak = evaluate_idea(_idea(payment_signal=0.1))
+    strong = evaluate_idea(_idea(payment_signal=1.0))
+    assert strong.eval_score > weak.eval_score
 
 
 def test_end_to_end_gen_then_eval(tmp_path):

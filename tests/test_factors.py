@@ -6,6 +6,7 @@ from idea_core.factors import (
     market_freshness,
     moat_signal,
     pain_intensity,
+    payment_signal,
 )
 from idea_core.models import CONFIDENCE_SYNTHETIC, IdeaCandidate
 
@@ -92,6 +93,12 @@ def test_factors_are_not_binary_switches():
         # one merely-busy (single light crowded hit) -> mid competition_density
         _candidate(title="invoice dashboard for indie investors", pain="manual tedious",
                    solution="a focused reconciliation view", target_user="investors"),
+        # strong paid demand (multiple WTP hits) -> high payment_signal
+        _candidate(title="contract review", pain="teams currently pay a freelancer and hire a consultant",
+                   solution="we pay per month for this", target_user="founders"),
+        # fabricated/irrelevant paid signal -> payment_signal floored low
+        _candidate(title="second brain tool", pain="user bought a course and watched tutorials",
+                   solution="a note app", target_user="developers"),
     ]
     for name, fn in FACTORS.items():
         values = {round(fn(c), 3) for c in candidates}
@@ -161,3 +168,50 @@ def test_synthetic_pain_discounted_without_corroboration():
         confidence=CONFIDENCE_SYNTHETIC,
     )
     assert pain_intensity(synth_paid) > pain_intensity(synth)
+
+
+# --- Round 2: payment_signal as its own factor (投资人复评严重度④) -----------
+
+
+def test_payment_signal_is_a_registered_factor():
+    # The 6 named factors stay; payment_signal is an additive 7th (contract intact).
+    assert "payment_signal" in FACTORS
+    for named in (
+        "market_freshness", "pain_intensity", "build_cost",
+        "moat_signal", "competition_density", "distribution_fit",
+    ):
+        assert named in FACTORS
+
+
+def test_payment_signal_rewards_real_paid_demand():
+    no_pay = _candidate(pain="teams do tedious manual work")
+    paid = _candidate(pain="teams currently pay a freelancer to do this tedious manual work")
+    strong = _candidate(
+        pain="teams currently pay a freelancer, hire a consultant and budget for it monthly"
+    )
+    assert payment_signal(no_pay) < payment_signal(paid) < payment_signal(strong)
+    assert payment_signal(no_pay) < 0.2          # no paid signal => low floor
+    assert payment_signal(strong) > 0.6          # strong corroboration scores high
+
+
+def test_payment_signal_penalizes_irrelevant_purchase_fallacy():
+    # round1 #4: "bought a course" paraded as willingness-to-pay for an unrelated tool.
+    fabricated = _candidate(
+        pain="user bought a course and read a book about productivity",
+        solution="a voice-to-PRD tool",
+    )
+    real = _candidate(pain="teams currently pay a freelancer for this exact task")
+    assert payment_signal(fabricated) < payment_signal(real)
+    # A bare adjacent purchase as "proof" is worse than silence about payment.
+    silent = _candidate(pain="teams do this manually")
+    assert payment_signal(fabricated) < payment_signal(silent)
+
+
+def test_payment_signal_discounts_synthetic_and_speculation():
+    text = "teams currently pay a freelancer for this"
+    real = _candidate(pain=text)
+    synth = _candidate(pain=text, confidence=CONFIDENCE_SYNTHETIC)
+    assert payment_signal(synth) < payment_signal(real)
+    speculative = _candidate(pain="users might pay for this, would be nice to have")
+    # "might pay / would be nice" is not evidence -> floored low (no direct signal).
+    assert payment_signal(speculative) < 0.2

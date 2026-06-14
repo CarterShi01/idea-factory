@@ -34,19 +34,27 @@ def write_markdown(
     top_n: int,
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    # ``scored`` may already be the diversity-selected digest (pipeline applies
+    # ranks.select_diverse_top_n before calling); slicing to top_n is idempotent.
+    digest = scored[:top_n]
     lines: list[str] = [
         f"# 创意工厂 — 每日候选（{today.isoformat()}）",
         "",
-        f"共 {len(scored)} 条候选，按 alpha（因子加权 × 时间衰减、含多样性）排序，取前 {min(top_n, len(scored))} 条。",
+        f"展示前 {len(digest)} 条，按 alpha（因子加权 × 时间衰减）排序并做多样性去聚类（Non-Duplicate Ratio 优先，近重不挤占头部）。",
         "",
         "> 这些是 idea-gen 产出的**未筛选**候选；最终是否推进由 idea-eval 评估决定。",
         "",
     ]
-    for rank, s in enumerate(scored[:top_n], start=1):
+    for rank, s in enumerate(digest, start=1):
         c = s.candidate
         synthetic = " ⚠️ 模拟" if c.confidence == "synthetic" else ""
+        # Round 3:三源融合候选醒目标记,体现护城河(多源信号汇聚而成)。
+        fusion = ""
+        fsrc = getattr(c, "fusion_sources", None) or []
+        if fsrc:
+            fusion = f" 🔗 三源融合（{' + '.join(fsrc)}）"
         lines += [
-            f"## {rank}. {c.title}  ·  alpha {s.alpha:.3f}{synthetic}",
+            f"## {rank}. {c.title}  ·  alpha {s.alpha:.3f}{synthetic}{fusion}",
             "",
             f"- **痛点**：{c.pain}",
             f"- **方案**：{c.solution}",

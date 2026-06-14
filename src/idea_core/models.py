@@ -72,6 +72,11 @@ class IdeaCandidate:
     mechanism: str = ""    # 具体技术/产品实现路径，不能只说 "AI/LLM 智能体"
     why_now: str = ""      # 为什么现有方案解决不了 / 为什么是现在的机会窗口
     mvp_week1: str = ""    # 第 1 周 MVP 能交付的最小可用功能
+    # Round 3（三源融合护城河，投资人复评 #2 + mission）：当一条候选由**多个不同
+    # 来源**的信号汇聚而成（external_event + brain_inbox + pain_persona 指向同一
+    # 主题），记录参与融合的来源类型列表。普通（单源）候选留空 []。新增字段、向后
+    # 兼容：旧 ideas.json 缺此键时反序列化用默认空列表。
+    fusion_sources: list[str] = field(default_factory=list)
 
     def text(self) -> str:
         """Concatenated lowercase text, used by factors and dedup."""
@@ -81,6 +86,7 @@ class IdeaCandidate:
             self.solution,
             self.target_user,
             self.mechanism,
+            self.why_now,   # Round 2: why_now carries moat/timing/paid-demand evidence
             self.category or "",
         ]
         return " ".join(p for p in parts if p).lower()

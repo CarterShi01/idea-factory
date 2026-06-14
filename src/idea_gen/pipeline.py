@@ -114,12 +114,16 @@ def run_pipeline(
 
     scored = ranks.score(candidates, today=today, weights=weights)
     ranked = ranks.rank(scored)
+    # Round 3(投资人复评 #3:Top-N 被近重挤占)。在导出前对头部做一次硬去聚类,
+    # 让每日 N 条摘要不被"语音备忘转任务"这类近似重复占满(提升 Non-Duplicate Ratio)。
+    # JSON 仍写完整 ranked(下游 idea-eval 看全量),只有人看的摘要走多样性选择。
+    digest = ranks.select_diverse_top_n(ranked, n=top_n)
 
     # 7. export
     json_path = output_dir / "ideas.json"
     md_path = output_dir / "ideas.md"
     export.write_json(ranked, json_path)
-    export.write_markdown(ranked, md_path, today=today, top_n=top_n)
+    export.write_markdown(digest, md_path, today=today, top_n=top_n)
 
     return PipelineResult(
         raw_count=len(raw),
