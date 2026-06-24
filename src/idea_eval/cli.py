@@ -29,9 +29,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--date", default=None, help="reference date (ISO); default: today")
     parser.add_argument(
         "--judge-backend",
-        choices=["none", "router", "cc", "mock"],
+        choices=["none", "router", "cc", "mock", "dify"],
         default="none",
-        help="LLM-as-judge over kill-gate survivors: none (rule-only, default) / router (Tencent) / cc / mock",
+        help="LLM-as-judge over kill-gate survivors: none (rule-only, default) / router (Tencent) / cc / mock / dify (Dify workflow)",
     )
     parser.add_argument(
         "--no-critique",

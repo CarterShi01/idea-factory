@@ -46,6 +46,8 @@ def _llm_backend(name: str, step: str, today: date, job_dir: str | Path) -> LLMB
     """Build an LLM backend; CC-handoff gets a dated job name for its file pack."""
     if name == "cc":
         return get_backend("cc", job_dir=job_dir, job_name=f"{step}-{today.isoformat()}")
+    if name == "dify":
+        return get_backend("dify", step=step)  # per-step Dify app/key; prompt lives in the flow
     return get_backend(name)
 
 

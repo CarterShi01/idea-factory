@@ -27,6 +27,8 @@ def _llm_backend(name: str, today: date, job_dir: str | Path, step: str = "judge
     """
     if name == "cc":
         return get_backend("cc", job_dir=job_dir, job_name=f"{step}-{today.isoformat()}")
+    if name == "dify":
+        return get_backend("dify", step=step)  # per-step Dify app/key; prompt lives in the flow
     return get_backend(name)
 
 

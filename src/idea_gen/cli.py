@@ -37,9 +37,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--gen-backend",
-        choices=["rule", "router", "cc", "mock"],
+        choices=["rule", "router", "cc", "mock", "dify"],
         default="rule",
-        help="generation backend: rule (offline, default) / router (Tencent) / cc (manual handoff) / mock",
+        help="generation backend: rule (offline, default) / router (Tencent) / cc (manual handoff) / mock / dify (Dify workflow, prompt-flow in dify/flows/)",
     )
     return parser
 

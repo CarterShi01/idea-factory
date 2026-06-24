@@ -292,6 +292,97 @@ class CCHandoffBackend:
         raise PendingHandoff(self.request_path, len(requests))
 
 
+class DifyBackend:
+    """Calls a Dify *workflow* app published from idea-factory's own flows.
+
+    The flow definitions (DSL) live in this repo under ``dify/flows/*.yml`` and are
+    the git source of truth (GitOps); Dify is the editor + runtime. Each pipeline
+    step (generate / critique / judge) maps to its own Dify workflow app + API key.
+
+    Flow I/O contract (keep the Dify Start/End node variables matching this, or
+    override via env): the Start node takes text inputs ``system`` and ``user``
+    (plus optional ``schema``); the End node outputs one variable ``result`` (text).
+    The prompt itself lives *inside* the Dify flow — idea-factory only ships the
+    system/user content and (optionally) the JSON schema for extraction.
+
+    Config (env): ``IDEA_DIFY_BASE_URL`` (default ``http://127.0.0.1:8080/v1``),
+    ``IDEA_DIFY_<STEP>_API_KEY`` then ``IDEA_DIFY_API_KEY`` (per-app key from Dify's
+    *API Access* panel), ``IDEA_DIFY_OUTPUT_KEY`` (default ``result``),
+    ``IDEA_DIFY_USER``, ``IDEA_DIFY_MIN_INTERVAL``. Stdlib only, provider-neutral.
+    """
+
+    name = "dify"
+
+    def __init__(
+        self,
+        step: str = "generate",
+        base_url: str | None = None,
+        api_key: str | None = None,
+        timeout: int = 120,
+    ):
+        self.step = step
+        self.base_url = (
+            base_url or os.environ.get("IDEA_DIFY_BASE_URL") or "http://127.0.0.1:8080/v1"
+        ).rstrip("/")
+        self.api_key = (
+            api_key
+            or os.environ.get(f"IDEA_DIFY_{step.upper()}_API_KEY")
+            or os.environ.get("IDEA_DIFY_API_KEY")
+            or ""
+        )
+        self.timeout = timeout
+        self.user = os.environ.get("IDEA_DIFY_USER", "idea-factory")
+        self.output_key = os.environ.get("IDEA_DIFY_OUTPUT_KEY", "result")
+        self.min_interval = float(os.environ.get("IDEA_DIFY_MIN_INTERVAL", "0.5"))
+
+    def _run(self, req: LLMRequest) -> str:
+        url = f"{self.base_url}/workflows/run"
+        inputs = {"system": req.system, "user": req.user}
+        if req.schema:
+            inputs["schema"] = json.dumps(req.schema, ensure_ascii=False)
+        payload = {"inputs": inputs, "response_mode": "blocking", "user": self.user}
+        http_req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json", "Authorization": f"Bearer {self.api_key}"},
+            method="POST",
+        )
+        with urllib.request.urlopen(http_req, timeout=self.timeout) as resp:  # noqa: S310 (configured URL)
+            body = json.loads(resp.read().decode("utf-8"))
+        outputs = (body.get("data") or {}).get("outputs") or {}
+        if self.output_key in outputs:
+            val = outputs[self.output_key]
+        elif outputs:
+            val = next(iter(outputs.values()))
+        else:
+            val = ""
+        return val if isinstance(val, str) else json.dumps(val, ensure_ascii=False)
+
+    def complete(self, requests: list[LLMRequest], retries: int = 2) -> list[LLMResponse]:
+        if not self.api_key:
+            err = f"dify backend: set IDEA_DIFY_{self.step.upper()}_API_KEY or IDEA_DIFY_API_KEY"
+            return [LLMResponse(id=r.id, ok=False, error=err) for r in requests]
+        out: list[LLMResponse] = []
+        for i, r in enumerate(requests):
+            if i:
+                time.sleep(self.min_interval)  # gentle throttle (small machine / single worker)
+            last = ""
+            for attempt in range(retries + 1):
+                try:
+                    text = self._run(r)
+                    data = extract_json(text) if r.schema else None
+                    out.append(LLMResponse(id=r.id, text=text, data=data, ok=True))
+                    last = ""
+                    break
+                except Exception as exc:  # noqa: BLE001 -- one bad call shouldn't kill the batch
+                    last = f"{type(exc).__name__}: {exc}"
+                    if attempt < retries:
+                        time.sleep(self.min_interval * (attempt + 1))
+            else:
+                out.append(LLMResponse(id=r.id, ok=False, error=last))
+        return out
+
+
 # --- factory + config -----------------------------------------------------
 
 
@@ -304,6 +395,8 @@ def get_backend(name: str | None = None, **kwargs) -> LLMBackend:
         return CCHandoffBackend(**kwargs)
     if name == "mock":
         return MockBackend(**kwargs)
+    if name == "dify":
+        return DifyBackend(**kwargs)
     raise ValueError(f"unknown LLM backend: {name!r}")
 
 
