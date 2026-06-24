@@ -24,7 +24,11 @@ idea-factory 有**两个 LLM 步骤**:生成(`idea_gen.generate`)和评判(`idea
 
 ## 2. 待办清单(按顺序,带"为什么")
 
-- [ ] **① Dify 实例可用**:开 `http://127.0.0.1:8080/install` 建管理员账号 → 在「设置→模型供应商」配好模型后端(创始人定的 claude -p custom provider)。*(前置:Dify 已部署在北京机并常驻,见 §3。)*
+- [ ] **① Dify 实例可用 + 接 claude -p 模型**:开 `http://127.0.0.1:8080/install` 建管理员账号 → 配模型后端(claude -p)。
+  - ⚠️ **当前状态**:跑的是 **stock 官方镜像**(`langgenius/dify-*:1.14.2`),fork(`CarterShi01/dify`)**未做任何 claude -p 改动**。
+  - ⚠️ **别 fork 核心源码**:compose 拉发布镜像、不 build 源码,改 `api/` 不生效(除非自建镜像,每次升级都要重 fork+rebuild,最重)。
+  - **推荐 (a)**:起一个**包 claude -p 的 OpenAI 兼容 shim** → Dify「模型供应商 → OpenAI-API-compatible」填 shim URL(纯运行时配置,不 fork、不 rebuild、扛升级)。
+  - 备选 (b):写 Dify 1.x **model-provider 插件**(正规扩展)。*(前置:Dify 已部署在北京机并常驻,见 §3。)*
 - [ ] **② 建两条 workflow**(照 `design/dify-integration.md` §3 迁移地图):
   - `idea-gen`:单 LLM 节点,system = `config/llm/generate.json` 的 system,user 透传(source/fusion 分支由 idea-factory 代码侧已选好再送),输出 `result`。
   - `idea-judge`:**两段链**(critique 节点 ← `config/llm/critique.json` → judge 节点 ← `config/llm/judge.json`),End 出终评 JSON。
