@@ -37,3 +37,6 @@ studio/web/vite.config.d.ts
 
 # ...but keep the directory and the committed sample inputs
 !data/processed/.gitkeep
+
+# OC 项目锚(手侧 opt-in,免 git)
+.oc/

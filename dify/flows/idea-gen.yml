@@ -1,0 +1,112 @@
+app:
+  description: idea-factory generate (thin passthrough)
+  icon: 🤖
+  icon_background: '#FFEAD5'
+  icon_type: emoji
+  mode: workflow
+  name: idea-gen
+  use_icon_as_answer_icon: false
+dependencies:
+- current_identifier: null
+  type: marketplace
+  value:
+    marketplace_plugin_unique_identifier: langgenius/openai_api_compatible:0.0.53@a0dfb462961a03c6a6415d4185043185b01017c64da93cf82a9e5ecaf59f8ed0
+    version: null
+kind: app
+version: 0.6.0
+workflow:
+  conversation_variables: []
+  environment_variables: []
+  features:
+    file_upload: {}
+    sensitive_word_avoidance:
+      enabled: false
+    text_to_speech:
+      enabled: false
+      language: ''
+      voice: ''
+  graph:
+    edges:
+    - data:
+        isInIteration: false
+        sourceType: start
+        targetType: llm
+      id: e1
+      source: start
+      sourceHandle: source
+      target: llm
+      targetHandle: target
+      type: custom
+    - data:
+        isInIteration: false
+        sourceType: llm
+        targetType: end
+      id: e2
+      source: llm
+      sourceHandle: source
+      target: end
+      targetHandle: target
+      type: custom
+    nodes:
+    - data:
+        title: start
+        type: start
+        variables:
+        - label: system
+          max_length: 48000
+          required: false
+          type: paragraph
+          variable: system
+        - label: user
+          max_length: 48000
+          required: true
+          type: paragraph
+          variable: user
+        - label: schema
+          max_length: 48000
+          required: false
+          type: paragraph
+          variable: schema
+      id: start
+      position:
+        x: 80
+        y: 280
+      type: custom
+    - data:
+        context:
+          enabled: false
+          variable_selector: []
+        model:
+          completion_params:
+            temperature: 0.9
+          mode: chat
+          name: hy3-preview
+          provider: langgenius/openai_api_compatible/openai_api_compatible
+        prompt_template:
+        - role: system
+          text: '{{#start.system#}}'
+        - role: user
+          text: '{{#start.user#}}'
+        title: LLM
+        type: llm
+        vision:
+          enabled: false
+      id: llm
+      position:
+        x: 380
+        y: 280
+      type: custom
+    - data:
+        outputs:
+        - value_selector:
+          - llm
+          - text
+          variable: result
+        title: end
+        type: end
+      id: end
+      position:
+        x: 680
+        y: 280
+      type: custom
+  rag_pipeline_variables: []

@@ -84,10 +84,11 @@ PYTHONPATH=src python3 -m idea_eval --judge-backend dify
 
 ## 5. 开放问题 / 设计决策(开发前想清)
 
-1. **prompt 双份漂移**:同一 prompt 现在会同时存在 `config/llm/generate.json`(给 router/rule)和 Dify 流(给 dify)。两份会漂。三个选择:
-   - **(推荐)收敛到 Dify 单一 LLM 路径**:一旦上 Dify,router 降级为"Dify 挂了的离线 fallback",prompt 真相源就是 Dify 流(导出的 DSL 在 git);`config/llm` 只留 schema + 非 prompt 配置。
-   - 保 `config/llm` 为权威,Dify 流当投影(每次手动同步)——违 idea-factory 的"无漂移"气质,不建议。
-   - 两后端各管各的 prompt(接受双份)——只在你确实要并行对比 router vs dify 时短期用。
+1. **prompt 双份漂移 —— 已决策(2026-06-27,创始人):收敛到 Dify 单一 LLM 路径。** 同一 prompt 现在会同时存在 `config/llm/generate.json`(给 router/rule)和 Dify 流(给 dify),两份会漂。定的方案:
+   - **✅ 选定:收敛到 Dify 单一 LLM 路径**。一旦上 Dify,router 降级为"Dify 挂了的离线 fallback",prompt 真相源就是 Dify 流(导出的 DSL 在 git);`config/llm` 只留 schema + 非 prompt 配置。
+   - ⚠️ **时序守卫**:此瘦身(从 `config/llm/*.json` 删 `system`/`user_template`)**必须在端到端 ④ 跑通、Dify 输出对齐契约之后**才做 —— 否则会在替代品(Dify 流)就绪前砸掉当前唯一能跑的 router 路径。在此之前 config/llm 保持原样。
+   - ~~保 `config/llm` 为权威,Dify 流当投影(每次手动同步)~~——违 idea-factory 的"无漂移"气质,**未选**。
+   - ~~两后端各管各的 prompt(接受双份)~~——仅短期 A/B 对比 router vs dify 用,**未选为长期态**。
 2. **`idea_core` 不进 Dify**:因子契约(`idea_core/factors.py`、schema)是"不许漂移"的命门,永远 Python。Dify 流只产文本,结构化抽取/校验仍在 idea-factory 侧(`schema` + `extract_json`)。
 3. **fallback 白捡**:`--gen-backend rule|mock` 仍在 → Dify 不可用时能退回离线,registry 派得专门做的缓存/fallback 你天生就有。
 
