@@ -35,11 +35,14 @@ def test_render_block_empty_for_no_profile():
 def test_build_request_prepends_founder_block():
     cfg = {"system": "ORIGINAL-SYSTEM", "user_template": "{x}"}
     req = build_request("i1", "user text", cfg)
-    assert "ORIGINAL-SYSTEM" in req.system
-    assert "创始人画像" in req.system          # injected
-    assert "蒙语" in req.system                 # the moat edge reaches the prompt
-    # original system content still present after the injected block
-    assert req.system.strip().endswith("ORIGINAL-SYSTEM")
+    # ⑤ (dify-prompt-authoring.md §3.2): the founder block now rides in the USER
+    # message (data); system stays the pure strategy prompt (which lives in the
+    # Dify flow, mirrored in config/llm for the offline router).
+    assert req.system == "ORIGINAL-SYSTEM"      # system unchanged (no founder)
+    assert "创始人画像" in req.user             # founder injected into user
+    assert "蒙语" in req.user                    # the moat edge reaches the prompt
+    # original user content still present after the injected block
+    assert req.user.strip().endswith("user text")
 
 
 def test_build_request_respects_skip_founder():

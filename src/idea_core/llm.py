@@ -337,7 +337,11 @@ class DifyBackend:
 
     def _run(self, req: LLMRequest) -> str:
         url = f"{self.base_url}/workflows/run"
-        inputs = {"system": req.system, "user": req.user}
+        # ⑤: the strategy/system prompt lives *inside* the Dify flow (visually
+        # editable); we only ship the user content (which already carries the
+        # founder block, see build_request) + optional schema. The flow's Start
+        # node therefore only needs ``user`` (+ ``schema``).
+        inputs = {"user": req.user}
         if req.schema:
             inputs["schema"] = json.dumps(req.schema, ensure_ascii=False)
         payload = {"inputs": inputs, "response_mode": "blocking", "user": self.user}
@@ -500,7 +504,12 @@ def build_request(item_id: str, user: str, config: dict) -> LLMRequest:
     if not config.get("skip_founder"):
         block = _founder_block_cached()
         if block:
-            system = f"{block}\n\n{system}" if system else block
+            # ⑤ (docs/design/dify-prompt-authoring.md §3.2): the founder profile
+            # rides in the USER message (it is data from config/founder.json), not
+            # the system prompt — so it reaches the Dify flow, whose LLM node embeds
+            # its own visually-editable system prompt and is NOT sent ours. Router /
+            # mock still see the identical founder + data content.
+            user = f"{block}\n\n{user}" if user else block
 
     return LLMRequest(
         id=item_id,

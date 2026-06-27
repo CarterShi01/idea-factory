@@ -57,7 +57,9 @@ def test_dify_parses_workflow_output(monkeypatch):
     assert out[0].data == {"score": 0.9}  # extracted because a schema was supplied
     # request shape matches the flow contract
     assert captured["url"].endswith("/workflows/run")
-    assert captured["payload"]["inputs"]["system"] == "sys"
+    # ⑤: the strategy/system prompt lives inside the Dify flow now, so the backend
+    # only ships ``user`` (+ schema) — it must NOT send ``system``.
+    assert "system" not in captured["payload"]["inputs"]
     assert captured["payload"]["inputs"]["user"] == "usr"
     assert captured["payload"]["response_mode"] == "blocking"
 
