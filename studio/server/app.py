@@ -42,6 +42,9 @@ load_dotenv(REPO_ROOT / ".env")
 HOST = os.environ.get("STUDIO_HOST", "127.0.0.1")
 PORT = int(os.environ.get("STUDIO_PORT", "3010"))
 PASSWORD = os.environ.get("STUDIO_PASSWORD", "")  # empty => auth disabled (dev)
+# Machine API key for the read-only /api/top3 endpoint (Bearer token). Empty =>
+# endpoint locked (401 for everyone) so it never accidentally serves unauthed.
+TOP3_API_KEY = os.environ.get("IDEA_TOP3_API_KEY", "")
 _SECRET = (os.environ.get("STUDIO_SECRET") or PASSWORD or "idea-factory-dev").encode()
 COOKIE = "studio_session"
 SESSION_TTL = 7 * 24 * 3600
@@ -112,6 +115,51 @@ def overview() -> dict:
         "last_generate": _mtime_iso(PROCESSED / "ideas.json"),
         "last_evaluate": _mtime_iso(PROCESSED / "screened.json"),
         "judged_by_llm": any(e.get("judged_by") == "llm" for e in screened),
+    }
+
+
+# verdicts that survive the kill-gate (idea_eval); "kill" is excluded from top3
+_SURVIVING_VERDICTS = ("pursue", "review")
+
+
+def _one_liner(entry: dict) -> str:
+    """浓缩现有字段成一句(不调 LLM):标题 + 最大赌注,压成单行、限长。"""
+    title = (entry.get("title") or "").strip()
+    risk = (entry.get("riskiest_assumption") or "").strip()
+    line = f"{title} — 最大赌注:{risk}" if risk else title
+    line = " ".join(line.split())  # collapse whitespace/newlines to one line
+    return line[:200]
+
+
+def top3() -> dict:
+    """Read-only: today's top-3 non-killed ideas as a stable machine schema.
+
+    screened.json is pre-sorted by idea_eval (_sort): verdict order
+    (pursue < review < kill), then -eval_score, then idea_id — so the first
+    three surviving entries are exactly the ranked top-3. No LLM, no writes.
+    """
+    path = PROCESSED / "screened.json"
+    screened = _read_json(path, [])
+    survivors = [e for e in screened if e.get("verdict") in _SURVIVING_VERDICTS][:3]
+    mtime = _mtime_iso(path)  # None if file missing
+    ref = mtime or datetime.now().isoformat(timespec="seconds")
+    top3_rows = []
+    for rank, e in enumerate(survivors, start=1):
+        top3_rows.append({
+            "rank": rank,
+            "idea_id": e.get("idea_id"),
+            "title": e.get("title"),
+            "one_liner": _one_liner(e),
+            "score": e.get("eval_score"),
+            "verdict": e.get("verdict"),
+            "riskiest_assumption": e.get("riskiest_assumption"),
+            "cheap_experiment": e.get("cheap_experiment"),
+        })
+    return {
+        "date": ref[:10],
+        "generated_at": ref,
+        "count": len(top3_rows),
+        "top3": top3_rows,
     }
 
 
@@ -224,6 +272,19 @@ class Handler(BaseHTTPRequestHandler):
     def _authed(self) -> bool:
         return (not _auth_enabled()) or _valid_token(self._cookie_token())
 
+    def _bearer_ok(self) -> bool:
+        """Machine auth for /api/top3: Authorization: Bearer <IDEA_TOP3_API_KEY>.
+
+        Empty key => locked (never serves unauthed). Constant-time compare.
+        """
+        if not TOP3_API_KEY:
+            return False
+        auth = self.headers.get("Authorization", "")
+        scheme, _, token = auth.partition(" ")
+        if scheme.lower() != "bearer" or not token:
+            return False
+        return hmac.compare_digest(token.strip(), TOP3_API_KEY)
+
     # -- routing --
     def do_GET(self):
         path = urlparse(self.path).path
@@ -273,6 +334,14 @@ class Handler(BaseHTTPRequestHandler):
     def _api_get(self, path):
         if path == "/api/me":
             return self._json({"auth": _auth_enabled(), "authed": self._authed()})
+        # machine endpoint: Bearer-key auth, separate from the browser cookie session
+        if path == "/api/top3":
+            if not self._bearer_ok():
+                return self._json({"error": "unauthorized"}, 401)
+            try:
+                return self._json(top3())
+            except Exception as exc:  # noqa: BLE001
+                return self._json({"error": f"{type(exc).__name__}: {exc}"}, 500)
         if not self._authed():
             return self._json({"error": "unauthorized"}, 401)
         try:

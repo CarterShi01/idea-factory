@@ -39,10 +39,25 @@ STUDIO_PASSWORD='a-strong-password' python3 studio/server/app.py   # serves dist
 | GET  | `/api/signals` | normalized 3-source signals |
 | POST | `/api/run/generate` `{backend,sources,top_n}` | run idea-gen |
 | POST | `/api/run/evaluate` `{backend,floor,top_n}` | run idea-eval |
+| GET  | `/api/top3` | **machine endpoint** — today's top-3 non-killed ideas, stable schema (read-only) |
 
-Env: `STUDIO_PASSWORD` (required for auth), `STUDIO_PORT` (default 3010),
-`STUDIO_SECRET` (cookie HMAC; defaults to the password). Live LLM runs use the
-kernel's `IDEA_LLM_*` / `OPENAI_*` (auto-loaded from repo `.env`).
+`/api/top3` is for downstream agents, **not** the browser cookie session: it
+authenticates with `Authorization: Bearer <IDEA_TOP3_API_KEY>` and returns
+`{date, generated_at, count, top3:[{rank, idea_id, title, one_liner, score,
+verdict, riskiest_assumption, cheap_experiment}]}`. It only reads
+`data/processed/screened.json` (no generate, no writes); missing/empty file =>
+`200 {"count":0,"top3":[]}`. If `IDEA_TOP3_API_KEY` is unset the endpoint is
+locked (401 for everyone). Example:
+
+```bash
+curl -H "Authorization: Bearer $IDEA_TOP3_API_KEY" http://127.0.0.1:3010/api/top3
+```
+
+Env: `STUDIO_PASSWORD` (required for the UI/cookie auth), `STUDIO_PORT` (default
+3010), `STUDIO_SECRET` (cookie HMAC; defaults to the password),
+`IDEA_TOP3_API_KEY` (Bearer key for `/api/top3`; empty => endpoint locked). Live
+LLM runs use the kernel's `IDEA_LLM_*` / `OPENAI_*` (auto-loaded from repo
+`.env`). See `.env.example`.
 
 ## Deploy on studio.enjoyapier.cloud
 
