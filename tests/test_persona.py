@@ -12,10 +12,10 @@ def test_load_and_flatten_leaves():
     segs = load_taxonomy()
     assert len(segs) >= 5
     leaves = flatten_leaves(segs)
-    # leaves have no children; roots (indie_dev/content_creator/smb_owner) are excluded
+    # leaves have no children; a parent with children (mongolian) is excluded
     assert all(s.is_leaf for s in leaves)
     ids = {s.id for s in leaves}
-    assert "indie_dev.saas" in ids and "indie_dev" not in ids
+    assert "mongolian.elderly" in ids and "mongolian" not in ids
 
 
 def test_select_returns_topn_sorted():

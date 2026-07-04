@@ -55,6 +55,9 @@ _DEFAULT_USER = "软件开发者与独立创业者"
 
 
 def _target_user(signal: Signal) -> str:
+    # 源③人群等自带的目标用户优先(蒙语中老年 / 英语学习者……),别被 dev 默认值覆盖。
+    if getattr(signal, "target_user", "").strip():
+        return signal.target_user.strip()
     cat = (signal.category or "").lower()
     if "dev" in cat or "ai" in cat or "software" in cat:
         return "开发者与技术型创始人"

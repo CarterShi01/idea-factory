@@ -1,60 +1,60 @@
 {
-  "_comment": "可增长的人群 taxonomy。种子人群面向中国创业;运行时会派生(源①真实信号里反复出现的 target_user 自动登记)与裂变(LLM 细分)。叶子人群才会被挖。monetizability_prior/reachability 为 0-1 先验;evidence_topics 用于和源①真实信号交叉佐证。",
+  "_comment": "源③ 目标用户人群池 = 『你想为他们解决痛点的人』。这里放**开放、多样的真实终端用户**(可以是任何角色:学英语的、说蒙语的老人、慢病患者……),系统模拟他们的痛点→找解法→看有没有机会。⚠️ 不要把『独立 SaaS 创始人 / 天使投资人』这类**评审角色**放进来——那是质疑/打分 idea 的系统角色,住在 config/founder.json + idea_eval,不是目标用户。种子人群『你来配』(可整份替换,或用环境变量 IDEA_PERSONA_TAXONOMY 指向你自己的文件);运行时还会**从源①真实信号自动派生**新人群(target_user 反复出现即登记,见 derive.py),两条腿并行。下面是按创始人真实可触达边给的**示例种子**,请按你的实际目标市场增删改。字段:leaf(无 children)才会被挖;monetizability_prior/reachability 0-1 先验;evidence_topics 用于和源①真实信号交叉佐证。",
   "segments": [
     {
-      "id": "indie_dev", "label": "独立开发者", "parent": null,
-      "axes": { "occupation": "独立开发", "budget": "低", "workflow_stage": "全栈" },
-      "reachability": 0.9, "monetizability_prior": 0.6,
-      "evidence_topics": ["独立开发", "indie", "saas", "副业"],
-      "last_mined_on": "1970-01-01", "children": ["indie_dev.saas", "indie_dev.tooling"]
+      "id": "mongolian", "label": "蒙语母语者(内蒙古)", "parent": null,
+      "axes": { "region": "内蒙古", "language": "蒙语母语·汉语弱", "note": "数字服务几乎全汉语,母语覆盖近空白——独占壁垒" },
+      "reachability": 0.8, "monetizability_prior": 0.4,
+      "evidence_topics": ["蒙语", "蒙古语", "内蒙古", "蒙文", "小语种"],
+      "last_mined_on": "1970-01-01", "children": ["mongolian.elderly", "mongolian.family"]
     },
     {
-      "id": "indie_dev.saas", "label": "独立 SaaS 创始人", "parent": "indie_dev",
-      "axes": { "occupation": "独立开发", "budget": "<¥300/月", "workflow_stage": "获客/计费/客服" },
-      "reachability": 0.9, "monetizability_prior": 0.75,
-      "evidence_topics": ["saas", "stripe", "订阅", "获客", "客服"],
+      "id": "mongolian.elderly", "label": "蒙语母语中老年人", "parent": "mongolian",
+      "axes": { "age": "50+", "language": "只/主要用蒙语", "budget": "低", "context": "看病/政务/缴费/用智能手机处处碰汉语墙" },
+      "reachability": 0.8, "monetizability_prior": 0.35,
+      "evidence_topics": ["蒙语", "内蒙古", "老年人", "智能手机", "看病"],
       "last_mined_on": "1970-01-01", "children": []
     },
     {
-      "id": "indie_dev.tooling", "label": "开发者工具作者", "parent": "indie_dev",
-      "axes": { "occupation": "独立开发", "budget": "低", "workflow_stage": "构建/分发" },
-      "reachability": 0.85, "monetizability_prior": 0.5,
-      "evidence_topics": ["开发者工具", "cli", "插件", "开源"],
+      "id": "mongolian.family", "label": "蒙汉双语家庭/子女", "parent": "mongolian",
+      "axes": { "language": "蒙汉双语", "context": "替不懂汉语的长辈处理数字事务、蒙文教育" },
+      "reachability": 0.75, "monetizability_prior": 0.45,
+      "evidence_topics": ["蒙语", "蒙文", "双语", "内蒙古", "教育"],
       "last_mined_on": "1970-01-01", "children": []
     },
     {
-      "id": "content_creator", "label": "内容创作者", "parent": null,
-      "axes": { "occupation": "自媒体", "budget": "中", "workflow_stage": "选题/制作/变现" },
-      "reachability": 0.6, "monetizability_prior": 0.6,
-      "evidence_topics": ["自媒体", "短视频", "小红书", "选题", "变现"],
-      "last_mined_on": "1970-01-01", "children": ["content_creator.shortvideo"]
-    },
-    {
-      "id": "content_creator.shortvideo", "label": "短视频博主", "parent": "content_creator",
-      "axes": { "occupation": "自媒体", "budget": "中", "workflow_stage": "脚本/剪辑/投流" },
-      "reachability": 0.55, "monetizability_prior": 0.55,
-      "evidence_topics": ["短视频", "剪辑", "抖音", "投流"],
+      "id": "english_learner", "label": "中国英语学习者", "parent": null,
+      "axes": { "goal": "口语/职场/考试", "budget": "中(教育愿付费)", "context": "背单词枯燥、没真人陪练、开口难" },
+      "reachability": 0.5, "monetizability_prior": 0.65,
+      "evidence_topics": ["英语学习", "口语", "背单词", "雅思", "四六级", "职场英语"],
       "last_mined_on": "1970-01-01", "children": []
     },
     {
-      "id": "smb_owner", "label": "小微商家", "parent": null,
-      "axes": { "occupation": "实体/电商", "budget": "中", "workflow_stage": "经营/营销/客户" },
-      "reachability": 0.4, "monetizability_prior": 0.8,
-      "evidence_topics": ["小微商家", "门店", "私域", "电商", "跨境"],
-      "last_mined_on": "1970-01-01", "children": ["smb_owner.crossborder"]
-    },
-    {
-      "id": "smb_owner.crossborder", "label": "跨境电商卖家", "parent": "smb_owner",
-      "axes": { "occupation": "跨境电商", "budget": "中高", "workflow_stage": "选品/上架/合规" },
-      "reachability": 0.45, "monetizability_prior": 0.8,
-      "evidence_topics": ["跨境", "亚马逊", "选品", "合规", "物流"],
+      "id": "wellbeing_seeker", "label": "情绪压力大想自我调节的都市人", "parent": null,
+      "axes": { "context": "焦虑/失眠/内耗,不到就医程度但想自助", "budget": "中", "compliance": "非临床·避开诊断红线" },
+      "reachability": 0.4, "monetizability_prior": 0.5,
+      "evidence_topics": ["焦虑", "失眠", "情绪", "内耗", "压力", "冥想", "心理"],
       "last_mined_on": "1970-01-01", "children": []
     },
     {
-      "id": "solo_investor", "label": "独立投资人", "parent": null,
-      "axes": { "occupation": "投资", "budget": "高", "workflow_stage": "看项目/尽调/投后" },
-      "reachability": 0.7, "monetizability_prior": 0.7,
-      "evidence_topics": ["投资", "deal flow", "尽调", "投后"],
+      "id": "patient_chronic", "label": "基层慢病患者/家属", "parent": null,
+      "axes": { "context": "高血压/糖尿病等慢病,长期随访、用药、复诊繁琐", "budget": "中", "compliance": "医疗合规高门槛·避开诊断器械" },
+      "reachability": 0.35, "monetizability_prior": 0.4,
+      "evidence_topics": ["慢病", "高血压", "糖尿病", "复诊", "用药", "随访", "基层医院"],
+      "last_mined_on": "1970-01-01", "children": []
+    },
+    {
+      "id": "overseas_buyer", "label": "海外(含中东)中小采购方", "parent": null,
+      "axes": { "context": "通过硬件出海人脉可触达的海外中小买家/分销", "budget": "中高", "language": "英语" },
+      "reachability": 0.4, "monetizability_prior": 0.7,
+      "evidence_topics": ["跨境", "出海", "中东", "硬件", "采购", "分销"],
+      "last_mined_on": "1970-01-01", "children": []
+    },
+    {
+      "id": "enterprise_secops", "label": "企业安全/云运维与采购", "parent": null,
+      "axes": { "context": "通过安全/云销售人脉可触达的企业安全运维/等保/采购", "budget": "高", "note": "B2B、有预算、可引荐" },
+      "reachability": 0.5, "monetizability_prior": 0.85,
+      "evidence_topics": ["企业安全", "云安全", "等保", "运维", "合规", "SOC"],
       "last_mined_on": "1970-01-01", "children": []
     }
   ]

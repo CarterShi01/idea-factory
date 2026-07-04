@@ -1,28 +1,61 @@
 [
   {
-    "persona": "自力更生的独立 SaaS 创始人",
-    "domain": "saas-ops",
+    "persona": "蒙语母语中老年人",
+    "domain": "mongolian.elderly",
     "pains": [
       {
-        "summary": "独立创始人浪费大量时间手动分拣客服邮件，而不是做产品",
-        "verbatim": "我整个上午都在手动回复同样的客服邮件，又累又重复。",
+        "summary": "只会蒙语的长辈用医院/政务/缴费 App 处处是汉语，办事全靠子女代劳",
+        "verbatim": "手机上全是汉字，我看不懂，挂号缴费每次都得等孩子有空。",
         "corroborated": true
       },
       {
-        "summary": "创始人缺少一种不弄坏计费就能测试定价改动的廉价方式",
-        "verbatim": "每次想测试新价格，我都怕把 Stripe 计费弄崩。",
+        "summary": "蒙语母语者缺少能听懂说得出的蒙语语音助手/输入方式",
+        "verbatim": "想打字发消息，蒙文输入太别扭，语音又听不懂我说的。",
         "corroborated": false
       }
     ]
   },
   {
-    "persona": "兼做软件的兼职天使投资人",
-    "domain": "investing",
+    "persona": "中国英语学习者",
+    "domain": "english_learner",
     "pains": [
       {
-        "summary": "投资人难以每周跟踪哪些被投公司需要关注",
-        "verbatim": "我总是等到来不及了，才发现某家被投公司在悄悄出问题。",
+        "summary": "想练口语但没有真人陪练，背单词枯燥、开口紧张没人纠错",
+        "verbatim": "我背了几千单词还是不敢开口，找外教又贵又约不上。",
         "corroborated": true
+      }
+    ]
+  },
+  {
+    "persona": "情绪压力大想自我调节的都市人",
+    "domain": "wellbeing_seeker",
+    "pains": [
+      {
+        "summary": "焦虑失眠内耗但没到就医程度，想自助调节却找不到靠谱不忽悠的工具",
+        "verbatim": "晚上脑子停不下来睡不着，看医生小题大做，App 又全是卖课的。",
+        "corroborated": false
+      }
+    ]
+  },
+  {
+    "persona": "基层慢病患者/家属",
+    "domain": "patient_chronic",
+    "pains": [
+      {
+        "summary": "慢病要长期随访用药复诊，患者和家属记不住、跟不上、来回跑医院",
+        "verbatim": "老人血压药老忘吃，复诊时间也记混，每次都白跑一趟。",
+        "corroborated": true
+      }
+    ]
+  },
+  {
+    "persona": "企业安全/云运维与采购",
+    "domain": "enterprise_secops",
+    "pains": [
+      {
+        "summary": "等保合规和日常安全运维靠人工整理证据、出报告，耗时又容易漏",
+        "verbatim": "每次等保和审计都要手工翻日志攒材料，一个人干到崩溃。",
+        "corroborated": false
       }
     ]
   }

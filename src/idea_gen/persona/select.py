@@ -15,11 +15,19 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
+import os
 from datetime import date
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
-_DEFAULT_TAXONOMY = Path(__file__).resolve().parent / "taxonomy.json"
+_SEED_TAXONOMY = Path(__file__).resolve().parent / "taxonomy.json"
+
+
+def _default_taxonomy_path() -> Path:
+    """种子人群文件:优先环境变量 ``IDEA_PERSONA_TAXONOMY``(『你配置的』人群池,
+    可指向仓外任意 JSON),否则用随源码分发的示例种子。"""
+    override = os.environ.get("IDEA_PERSONA_TAXONOMY")
+    return Path(override) if override else _SEED_TAXONOMY
 
 
 @dataclass
@@ -41,7 +49,7 @@ class Segment:
 
 def load_taxonomy(path: str | Path | None = None, derived_path: str | Path | None = None) -> list[Segment]:
     """加载种子人群;若给定 ``derived_path`` 且存在,合并自动派生的人群(去重 by id)。"""
-    p = Path(path) if path else _DEFAULT_TAXONOMY
+    p = Path(path) if path else _default_taxonomy_path()
     data = json.loads(p.read_text(encoding="utf-8"))
     base = [Segment(**{k: v for k, v in s.items() if k in Segment.__annotations__}) for s in data.get("segments", [])]
     if derived_path and Path(derived_path).exists():

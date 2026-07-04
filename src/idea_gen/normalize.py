@@ -83,6 +83,7 @@ def normalize_record(raw: dict) -> Signal:
         url=url,
         category=raw.get("category"),
         confidence=raw.get("confidence", CONFIDENCE_REAL),
+        target_user=(raw.get("target_user") or "").strip(),
     )
 
 
