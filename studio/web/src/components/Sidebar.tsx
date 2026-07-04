@@ -1,4 +1,4 @@
-export type Tab = "overview" | "ideas" | "decisions" | "signals" | "run";
+export type Tab = "overview" | "ideas" | "decisions" | "signals" | "run" | "profile";
 
 const ITEMS: { key: Tab; label: string; ico: string }[] = [
   { key: "overview", label: "概览", ico: "◉" },
@@ -6,6 +6,7 @@ const ITEMS: { key: Tab; label: string; ico: string }[] = [
   { key: "decisions", label: "评估决策", ico: "⊘" },
   { key: "signals", label: "信号", ico: "≈" },
   { key: "run", label: "运行管线", ico: "▷" },
+  { key: "profile", label: "画像", ico: "☰" },
 ];
 
 export function Sidebar({

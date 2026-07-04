@@ -57,6 +57,23 @@ export interface Overview {
   judged_by_llm: boolean;
 }
 
+// Founder profile (config/founder.json). Known editable fields are typed; extra
+// metadata keys (_doc, _version, _labels, …) ride through untouched on save.
+export interface FounderProfile {
+  identity: string;
+  capital_rmb: number;
+  capital_note: string;
+  skills: string[];
+  network: string[];
+  language_region_edge: string[];
+  reach_keywords_en: string[];
+  reach_keywords_zh: string[];
+  hard_constraints: string[];
+  anti_fit: string[];
+  _labels?: Record<string, string>;
+  [k: string]: unknown;
+}
+
 export type Backend = "rule" | "router" | "cc" | "mock";
 export type JudgeBackend = "none" | "router" | "cc" | "mock";
 export type SourceKey = "external_event" | "brain_inbox" | "pain_persona";

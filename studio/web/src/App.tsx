@@ -7,6 +7,7 @@ import { Ideas } from "./pages/Ideas";
 import { Decisions } from "./pages/Decisions";
 import { Signals } from "./pages/Signals";
 import { RunPanel } from "./pages/RunPanel";
+import { Profile } from "./pages/Profile";
 
 type Auth = "checking" | "in" | "out";
 
@@ -45,6 +46,7 @@ export function App() {
         {tab === "decisions" && <Decisions />}
         {tab === "signals" && <Signals />}
         {tab === "run" && <RunPanel onRan={refresh} />}
+        {tab === "profile" && <Profile />}
       </main>
     </div>
   );

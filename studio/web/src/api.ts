@@ -1,4 +1,4 @@
-import type { Decision, Idea, Overview, Signal } from "./types";
+import type { Decision, FounderProfile, Idea, Overview, Signal } from "./types";
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
@@ -35,4 +35,8 @@ export const api = {
     }),
   inbox: (body: Record<string, unknown>) =>
     req<{ ok: boolean }>("/api/inbox", { method: "POST", body: JSON.stringify(body) }),
+
+  founderProfile: () => req<FounderProfile>("/api/founder-profile"),
+  saveFounderProfile: (body: FounderProfile) =>
+    req<{ ok: boolean }>("/api/founder-profile", { method: "PUT", body: JSON.stringify(body) }),
 };
