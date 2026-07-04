@@ -27,6 +27,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 WEB_DIST = REPO_ROOT / "studio" / "web" / "dist"
 DATA_DIR = REPO_ROOT / "data"
 PROCESSED = DATA_DIR / "processed"
+# Founder profile (config/founder.json) — the pipeline re-reads it every run, so an
+# edit saved here automatically takes effect on the next generate/evaluate.
+FOUNDER_PATH = REPO_ROOT / "config" / "founder.json"
 
 import sys
 
@@ -200,6 +203,52 @@ def signals() -> list[dict]:
     return [s.to_dict() for s in normalize(raw)]
 
 
+# --- founder profile (editable) ------------------------------------------
+# Keys the kernel actually reads (factors._load_founder_reach + llm.render_founder_block).
+# A PUT that would drop/break any of these is rejected 400 so an edit can never
+# silently disable founder-fit scoring or the LLM founder block.
+
+
+def read_founder_profile() -> dict:
+    """Return config/founder.json as-is (incl. _labels/_version metadata)."""
+    return _read_json(FOUNDER_PATH, {})
+
+
+def validate_founder_profile(prof) -> str | None:
+    """Return an error string if the profile is missing/malforms a required key, else None."""
+    if not isinstance(prof, dict):
+        return "profile must be a JSON object"
+    identity = prof.get("identity")
+    if not isinstance(identity, str) or not identity.strip():
+        return "identity is required and must be a non-empty string"
+    for key in ("reach_keywords_en", "reach_keywords_zh"):
+        val = prof.get(key)
+        if not isinstance(val, list) or not all(isinstance(x, str) for x in val):
+            return f"{key} is required and must be a list of strings"
+    # Other kernel-read keys: optional, but if present must be the right shape.
+    for key in ("skills", "network", "language_region_edge", "hard_constraints", "anti_fit"):
+        if key in prof and not isinstance(prof[key], list):
+            return f"{key} must be a list"
+    if "capital_rmb" in prof and not isinstance(prof["capital_rmb"], (int, float)):
+        return "capital_rmb must be a number"
+    return None
+
+
+def write_founder_profile(prof: dict) -> dict:
+    """Validate then atomically write config/founder.json (temp file + rename).
+
+    Raises ValueError on validation failure (→ 400) without touching the file.
+    """
+    err = validate_founder_profile(prof)
+    if err:
+        raise ValueError(err)
+    FOUNDER_PATH.parent.mkdir(parents=True, exist_ok=True)
+    tmp = FOUNDER_PATH.parent / (FOUNDER_PATH.name + ".tmp")
+    tmp.write_text(json.dumps(prof, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    tmp.replace(FOUNDER_PATH)  # atomic on same filesystem
+    return {"ok": True}
+
+
 def _ref_date(body: dict) -> date:
     d = body.get("date")
     try:
@@ -364,6 +413,22 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"error": f"{type(exc).__name__}: {exc}"}, 500)
         return self._json({"error": "not found"}, 404)
 
+    def do_PUT(self):
+        path = urlparse(self.path).path
+        if not path.startswith("/api/"):
+            return self._json({"error": "not found"}, 404)
+        if not self._authed():
+            return self._json({"error": "unauthorized"}, 401)
+        body = self._body()
+        try:
+            if path == "/api/founder-profile":
+                return self._json(write_founder_profile(body))
+        except ValueError as exc:  # validation failure → bad request, file untouched
+            return self._json({"error": str(exc)}, 400)
+        except Exception as exc:  # noqa: BLE001 — surface write errors to the UI
+            return self._json({"error": f"{type(exc).__name__}: {exc}"}, 500)
+        return self._json({"error": "not found"}, 404)
+
     def _api_get(self, path, query=None):
         query = query or {}
         if path == "/api/me":
@@ -390,6 +455,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(_load_json("screened.json", version, []))
             if path == "/api/signals":
                 return self._json(signals())
+            if path == "/api/founder-profile":
+                return self._json(read_founder_profile())
         except Exception as exc:  # noqa: BLE001
             return self._json({"error": f"{type(exc).__name__}: {exc}"}, 500)
         return self._json({"error": "not found"}, 404)

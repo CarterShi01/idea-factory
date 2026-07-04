@@ -1,5 +1,19 @@
 {
   "_doc": "创始人画像 —— idea-factory 的『谁来执行』约束层。所有 LLM 步骤(generate/critique/judge)的 system prompt 在加载时都会注入本画像(见 idea_core.llm.render_founder_block),distribution_fit 因子也读取本画像里的可触达渠道/语言地域优势。改这里 = 改全管线对创始人适配度的判断。不引依赖、纯 JSON。",
+  "_version": "v1",
+  "_labels": {
+    "_note": "字段中文 label,供 Studio『画像』表单渲染;仅 UI 用途,factors.py / llm.py 不读本键(它们会忽略多余键)。真实被读取的键名不可改动:identity, capital_rmb, skills, network, language_region_edge, reach_keywords_en, reach_keywords_zh, hard_constraints, anti_fit。",
+    "identity": "身份定位",
+    "capital_rmb": "启动资金(人民币)",
+    "capital_note": "资金说明",
+    "skills": "技能",
+    "network": "可低成本触达的人脉 / 渠道",
+    "language_region_edge": "语言 / 地域独占优势(护城河)",
+    "reach_keywords_en": "可触达用户关键词(英文)",
+    "reach_keywords_zh": "可触达用户关键词(中文)",
+    "hard_constraints": "硬约束",
+    "anti_fit": "明显不适合他的方向"
+  },
   "identity": "一人公司创始人:10 年资深全栈程序员 + 产品经理(既能独立写代码、也能定义产品/需求/定价/GTM)。目标:AI 时代做『超级个体』(one-person company)。常驻中国北京,英语好 —— 可做面向全球/英文市场的 SaaS,不局限国内。",
   "capital_rmb": 60000,
   "capital_note": "启动资金约 6 万人民币(自有、非融资)。意味着:① 不能烧钱买量获客;② 养不起团队/重资产;③ 必须靠手艺(自己写代码)和现有人脉低成本启动;④ 需要早期就能收到钱或极低烧钱跑很久。任何需要先砸钱、长期不赚钱、靠融资续命的方向对他都是高风险。",

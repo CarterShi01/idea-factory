@@ -1,4 +1,4 @@
-import type { Decision, Idea, Overview, Signal, Version } from "./types";
+import type { Decision, FounderProfile, Idea, Overview, Signal, Version } from "./types";
 
 const vq = (version?: string) => (version ? `?version=${encodeURIComponent(version)}` : "");
 
@@ -38,4 +38,8 @@ export const api = {
     }),
   inbox: (body: Record<string, unknown>) =>
     req<{ ok: boolean }>("/api/inbox", { method: "POST", body: JSON.stringify(body) }),
+
+  founderProfile: () => req<FounderProfile>("/api/founder-profile"),
+  saveFounderProfile: (body: FounderProfile) =>
+    req<{ ok: boolean }>("/api/founder-profile", { method: "PUT", body: JSON.stringify(body) }),
 };

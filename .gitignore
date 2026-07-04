@@ -40,3 +40,4 @@ studio/web/vite.config.d.ts
 
 # OC 项目锚(手侧 opt-in,免 git)
 .oc/
+.claude/worktrees/
