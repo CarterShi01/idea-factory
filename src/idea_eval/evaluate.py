@@ -227,6 +227,9 @@ def _survivor_fields(e: Evaluation, idea: dict) -> dict:
         "target_user": idea.get("target_user", ""),
         "factors": json.dumps(e.factors, ensure_ascii=False),
         "confidence": e.confidence,
+        # 来源:让 critique/judge 按来源分叉——external_event(英文HN市场机会)不该用
+        # 独占/护城河标尺去杀,pain_persona/brain_inbox 才按 founder 独占审(中英混合)。
+        "source": idea.get("source", ""),
         # ff1 founder-fit: surface the generator's monopoly claims so the critic/judge
         # can attack them directly ("你说只有你能做,但这条用不上蒙语/没有那条引荐").
         # render_template ignores unused placeholders, so existing prompts are unaffected.
