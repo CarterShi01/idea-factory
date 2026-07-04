@@ -30,6 +30,18 @@ def _load_sources_config() -> dict:
     return {"static_external": {}, "brain": {}, "persona": {}}
 
 
+def _cap_english_by_heat(records: list[dict], top_n: int) -> list[dict]:
+    """英文 HN 记录(source_name=='hn')按 points 降序只留前 top_n;其余源全保留。
+    top_n<=0 表示不截断。稳定:非 hn 记录保持原顺序,hn 记录按热度挑出后接在其后。"""
+    if top_n is None or top_n <= 0:
+        return records
+    hn = [r for r in records if r.get("source_name") == "hn"]
+    if len(hn) <= top_n:
+        return records
+    keep = set(id(r) for r in sorted(hn, key=lambda r: r.get("points", 0), reverse=True)[:top_n])
+    return [r for r in records if r.get("source_name") != "hn" or id(r) in keep]
+
+
 def collect_all(
     data_dir: str | Path = "data",
     sources: list[str] | None = None,
@@ -69,6 +81,10 @@ def collect_all(
             peer.extend(adapter.collect(ctx))
         except Exception:  # noqa: BLE001 — 单源隔离
             continue
+
+    # 英文 HN 洪水治理:只保留热度(points)最高的前 N 条英文信号,防止实时 HN 淹没
+    # 中文市场人群(源③)。默认 20,可在 sources.json 的 hn_algolia.hot_top_n 调。
+    peer = _cap_english_by_heat(peer, int(cfg.get("hn_algolia", {}).get("hot_top_n", 20)))
 
     # 第二遍:源③(persona),拿第一遍结果作 grounding
     records: list[dict] = list(peer)
