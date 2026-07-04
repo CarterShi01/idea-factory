@@ -284,36 +284,46 @@ def diversify_select(
     survivors = [e for e in evaluations if e.verdict != KILL]
     killed = [e for e in evaluations if e.verdict == KILL]
     survivors.sort(key=lambda e: (-e.eval_score, e.idea_id))
+    ui_n, zh_min, en_max = cfg["ui_n"], cfg["zh_min"], cfg["en_max"]
+    edge_cap, dj = cfg["per_edge_cap"], cfg["dedup_jaccard"]
 
-    picked: list[Evaluation] = []
-    rest: list[Evaluation] = []
-    en_n = 0
-    edge_count: dict[str, int] = {}
-    seen: list[set] = []
-    ui_n, en_max, edge_cap, dj = cfg["ui_n"], cfg["en_max"], cfg["per_edge_cap"], cfg["dedup_jaccard"]
+    def _bkt(e):
+        return bucket_of(ideas_by_id.get(e.idea_id, {}).get("source", ""))
 
-    for e in survivors:
-        if len(picked) >= ui_n:
-            rest.append(e); continue
-        idea = ideas_by_id.get(e.idea_id, {})
-        src = idea.get("source", "")
-        bkt, edge = bucket_of(src), _edge_of(idea, src)
-        toks = _tok(f"{e.title} {idea.get('pain','')}")
-        if bkt == "en" and en_n >= en_max:
-            rest.append(e); continue
-        if edge_count.get(edge, 0) >= edge_cap:
-            rest.append(e); continue
-        if any(_jac(toks, s) >= dj for s in seen):
-            rest.append(e); continue
-        picked.append(e); seen.append(toks)
-        edge_count[edge] = edge_count.get(edge, 0) + 1
-        if bkt == "en":
-            en_n += 1
-    # 幸存者充足但被配额/去重挡下导致不足 UI_N → 放宽回填(只保长度,不再卡配额)
-    if len(picked) < ui_n:
-        need = ui_n - len(picked)
-        picked.extend(rest[:need]); rest = rest[need:]
-    return picked + rest + killed
+    def _pick_bucket(pool: list, n: int) -> list:
+        """从(已按分排序的)桶里取 n 条:先按 单边上限 + 近重去聚类 选,不够再放宽补到 n。"""
+        chosen: list = []
+        parked: list = []
+        edge_count: dict[str, int] = {}
+        seen: list[set] = []
+        for e in pool:
+            if len(chosen) >= n:
+                parked.append(e); continue
+            idea = ideas_by_id.get(e.idea_id, {})
+            edge = _edge_of(idea, idea.get("source", ""))
+            toks = _tok(f"{e.title} {idea.get('pain','')}")
+            if edge_count.get(edge, 0) >= edge_cap or any(_jac(toks, s) >= dj for s in seen):
+                parked.append(e); continue
+            chosen.append(e); seen.append(toks)
+            edge_count[edge] = edge_count.get(edge, 0) + 1
+        if len(chosen) < n:  # 严格约束不够 → 放宽 edge_cap/dedup 补到 n
+            chosen += parked[: n - len(chosen)]
+        return chosen
+
+    zh_all = [e for e in survivors if _bkt(e) == "zh"]
+    en_all = [e for e in survivors if _bkt(e) == "en"]
+
+    # 配额驱动『中文为主』:目标 zh_min 中 + en_max 英;某桶不够,另一桶补足 ui_n。
+    en_target = min(en_max, len(en_all))
+    zh_target = min(len(zh_all), ui_n - en_target)
+    en_target = min(len(en_all), ui_n - zh_target)  # zh 不足时英文回补
+
+    head = _pick_bucket(zh_all, zh_target) + _pick_bucket(en_all, en_target)
+    head_ids = {id(e) for e in head}
+    # 头部按分排序(最好的在最前),其余幸存者、再 kill 随后
+    head.sort(key=lambda e: (-e.eval_score, e.idea_id))
+    rest = [e for e in survivors if id(e) not in head_ids]
+    return head + rest + killed
 
 
 def evaluate_all(ideas: list[dict], floor: float = DEFAULT_FLOOR) -> list[Evaluation]:

@@ -77,3 +77,23 @@ def test_diversify_enforces_zh_majority_quota():
     from collections import Counter
     edge_counts = Counter(ideas[e.idea_id]["target_user"] for e in head)
     assert all(c <= 6 for c in edge_counts.values())
+
+
+def test_diversify_backfill_prefers_zh_when_one_edge_dominates():
+    # 真实场景:zh 存活集中在单一边(蒙语)>edge_cap。回填必须优先补 zh(放宽 edge_cap),
+    # 而不是用 en 顶上——否则 en 会超 en_max(早期 bug)。
+    ideas, evs = {}, []
+    for i in range(18):  # 18 条 zh,全是"蒙语"这一个边
+        iid = f"zh{i}"
+        ideas[iid] = {"id": iid, "source": "pain_persona", "title": f"蒙语工具{i}",
+                      "pain": f"痛{i}", "target_user": "蒙语政企"}
+        evs.append(_ev(iid, 80 - i * 0.1))
+    for i in range(12):  # 12 条 en,分更高
+        iid = f"en{i}"
+        ideas[iid] = {"id": iid, "source": "external_event", "title": f"全球工具{i}",
+                      "pain": f"p{i}", "target_user": "global"}
+        evs.append(_ev(iid, 95 - i * 0.1))
+    head = diversify_select(evs, ideas)[:20]
+    en = sum(1 for e in head if ideas[e.idea_id]["source"] == "external_event")
+    assert en <= 6                 # 英文不超 en_max,即便英文分更高、zh 全挤一个边
+    assert 20 - en >= 14           # 中文为主(存活 zh=18 足够)
