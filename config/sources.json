@@ -12,25 +12,53 @@
   },
 
   "vps_browser": {
-    "enabled": false,
-    "_comment": "经 Windows VPS 已登录的 Chrome 抓中文站；cdp_endpoint 填 tailnet 上 Chrome 的 remote-debugging 端口。targets 的选择器需按各站当前 DOM 调。",
+    "enabled": true,
+    "_comment": "经 Windows VPS 已登录的 Chrome 抓中文站(源①真实信号)。enabled=true 仅表示'启用',真正触网还需 --live;离线默认路径不受影响。⚠️ 运行处必须能触达那台**已登录**的 Chrome 的 remote-debugging 端口:核心机默认无 tailnet,需 devops 加 socat 桥(仿 oc-bridge-socat-browser:local 172.17.0.1:9222 → VPS 100.111.25.20:9222)后把 cdp_endpoint 改成桥地址,或直接在 VPS 上跑。targets 的选择器要按各站现网 DOM 实时调(首次多半要改)。搜索词已对齐源③目标用户痛点(而非创始人镜像)。",
     "cdp_endpoint": "http://100.111.25.20:9222",
     "nav_timeout_ms": 30000,
     "max_items_per_target": 20,
     "targets": [
       {
-        "name": "xiaohongshu",
-        "category": "独立开发",
-        "url": "https://www.xiaohongshu.com/search_result?keyword=%E7%8B%AC%E7%AB%8B%E5%BC%80%E5%8F%91",
+        "name": "zhihu_english",
+        "category": "英语学习",
+        "url": "https://www.zhihu.com/search?type=content&q=%E8%8B%B1%E8%AF%AD%E5%8F%A3%E8%AF%AD%20%E7%97%9B%E7%82%B9",
+        "item_selector": ".SearchResult-Card",
+        "title_selector": ".ContentItem-title"
+      },
+      {
+        "name": "xhs_english",
+        "category": "英语学习",
+        "url": "https://www.xiaohongshu.com/search_result?keyword=%E8%83%8C%E5%8D%95%E8%AF%8D%E5%9D%9A%E6%8C%81%E4%B8%8D%E4%B8%8B%E5%8E%BB",
         "item_selector": "section.note-item",
         "title_selector": "a.title, span.title"
       },
       {
-        "name": "zhihu",
-        "category": "创业痛点",
-        "url": "https://www.zhihu.com/search?type=content&q=%E5%88%9B%E4%B8%9A%20%E7%97%9B%E7%82%B9",
+        "name": "zhihu_wellbeing",
+        "category": "情绪",
+        "url": "https://www.zhihu.com/search?type=content&q=%E7%84%A6%E8%99%91%20%E5%A4%B1%E7%9C%A0%20%E6%80%8E%E4%B9%88%E5%8A%9E",
         "item_selector": ".SearchResult-Card",
         "title_selector": ".ContentItem-title"
+      },
+      {
+        "name": "zhihu_elderly",
+        "category": "老年数字鸿沟",
+        "url": "https://www.zhihu.com/search?type=content&q=%E8%80%81%E4%BA%BA%20%E6%99%BA%E8%83%BD%E6%89%8B%E6%9C%BA%20%E4%B8%8D%E4%BC%9A%E7%94%A8",
+        "item_selector": ".SearchResult-Card",
+        "title_selector": ".ContentItem-title"
+      },
+      {
+        "name": "zhihu_chronic",
+        "category": "慢病",
+        "url": "https://www.zhihu.com/search?type=content&q=%E6%85%A2%E7%97%85%20%E5%A4%8D%E8%AF%8A%20%E7%94%A8%E8%8D%AF%20%E6%8F%90%E9%86%92",
+        "item_selector": ".SearchResult-Card",
+        "title_selector": ".ContentItem-title"
+      },
+      {
+        "name": "xhs_mongolian",
+        "category": "蒙语",
+        "url": "https://www.xiaohongshu.com/search_result?keyword=%E5%86%85%E8%92%99%E5%8F%A4%20%E8%92%99%E8%AF%AD",
+        "item_selector": "section.note-item",
+        "title_selector": "a.title, span.title"
       }
     ]
   }
