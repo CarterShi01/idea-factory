@@ -14,6 +14,7 @@ from datetime import date
 from pathlib import Path
 
 from idea_core.llm import LLMBackend, get_backend, load_step_config
+from idea_core import versioning
 
 from . import evaluate, export
 from .evaluate import KILL, PURSUE, REVIEW
@@ -41,6 +42,7 @@ class EvalResult:
     evaluations: list = field(default_factory=list)
     json_path: Path | None = None
     memos_path: Path | None = None
+    version_id: str | None = None
 
 
 def run_evaluation(
@@ -54,6 +56,7 @@ def run_evaluation(
     llm: LLMBackend | None = None,
     critique_llm: LLMBackend | None = None,
     job_dir: str | Path = "data/llm_jobs",
+    version: bool = True,
 ) -> EvalResult:
     """Screen idea_gen's candidates.
 
@@ -102,6 +105,10 @@ def run_evaluation(
     export.write_json(evaluations, json_path)
     export.write_memos(evaluations, memos_path, today=today, top_n=top_n)
 
+    # Snapshot this run as an immutable version (offline, stdlib) unless opted out.
+    # Version id is deterministic on ``today`` (Nth run of that date).
+    version_id = versioning.commit_version(output_dir, today.isoformat()) if version else None
+
     return EvalResult(
         evaluated=len(evaluations),
         pursue=sum(1 for e in evaluations if e.verdict == PURSUE),
@@ -110,4 +117,5 @@ def run_evaluation(
         evaluations=evaluations,
         json_path=json_path,
         memos_path=memos_path,
+        version_id=version_id,
     )

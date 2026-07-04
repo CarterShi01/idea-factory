@@ -5,14 +5,14 @@ import { FactorBars } from "../components/FactorBar";
 import { SyntheticChip } from "../components/VerdictChip";
 import { sourceLabel } from "../labels";
 
-export function Ideas() {
+export function Ideas({ version }: { version?: string }) {
   const [ideas, setIdeas] = useState<Idea[] | null>(null);
   const [err, setErr] = useState("");
   const [open, setOpen] = useState<string | null>(null);
 
   useEffect(() => {
-    api.ideas().then(setIdeas).catch((e) => setErr((e as Error).message));
-  }, []);
+    api.ideas(version).then(setIdeas).catch((e) => setErr((e as Error).message));
+  }, [version]);
 
   if (err) return <div className="empty">{err}</div>;
   if (!ideas) return <div className="empty"><span className="spinner" /> 加载中…</div>;

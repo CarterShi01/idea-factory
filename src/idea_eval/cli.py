@@ -40,6 +40,13 @@ def build_parser() -> argparse.ArgumentParser:
         default=True,
         help="skip the devil's advocate pass before the judge (default: on when --judge-backend != none)",
     )
+    parser.add_argument(
+        "--no-version",
+        dest="version",
+        action="store_false",
+        default=True,
+        help="skip snapshotting this run into data/processed/versions/ (default: commit a version)",
+    )
     return parser
 
 
@@ -70,6 +77,7 @@ def main(argv: list[str] | None = None) -> int:
             top_n=args.top_n,
             judge_backend=args.judge_backend,
             critique=args.critique,
+            version=args.version,
         )
     except PendingHandoff as ph:
         return _report_handoff(ph)
@@ -79,6 +87,8 @@ def main(argv: list[str] | None = None) -> int:
         f"{result.review} review · {result.killed} killed"
     )
     print(f"wrote {result.json_path} and {result.memos_path}")
+    if result.version_id:
+        print(f"committed version {result.version_id} → {args.output_dir}/versions/{result.version_id}/")
     survivors = [e for e in result.evaluations if e.verdict in ("pursue", "review")]
     print(f"top {min(args.top_n, len(survivors))} worth a look:")
     for rank, e in enumerate(survivors[: args.top_n], start=1):

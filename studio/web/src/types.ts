@@ -57,6 +57,14 @@ export interface Overview {
   judged_by_llm: boolean;
 }
 
+export interface Version {
+  id: string;
+  created_at: string;
+  ui_count: number;
+  en: number;
+  zh: number;
+}
+
 export type Backend = "rule" | "router" | "cc" | "mock";
 export type JudgeBackend = "none" | "router" | "cc" | "mock";
 export type SourceKey = "external_event" | "brain_inbox" | "pain_persona";

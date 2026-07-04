@@ -20,7 +20,7 @@ import time
 from datetime import date, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 # --- locate repo root and import the kernel -------------------------------
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -31,6 +31,7 @@ PROCESSED = DATA_DIR / "processed"
 import sys
 
 sys.path.insert(0, str(REPO_ROOT / "src"))
+from idea_core import versioning  # noqa: E402
 from idea_core.llm import load_dotenv  # noqa: E402
 from idea_gen.collect import collect_all  # noqa: E402
 from idea_gen.normalize import normalize  # noqa: E402
@@ -101,9 +102,37 @@ def _factor_names() -> list[str]:
     return list(FACTORS)
 
 
-def overview() -> dict:
-    ideas = _read_json(PROCESSED / "ideas.json", [])
-    screened = _read_json(PROCESSED / "screened.json", [])
+# --- version resolution ---------------------------------------------------
+# Reads default to the *latest* version; an explicit ?version=<id> selects one.
+# With no versions at all we fall back to the flat data/processed/*.json files
+# (backward compatibility with runs made before versioning existed).
+
+
+def _resolve_version(version: str | None) -> str | None:
+    """The version id to serve: the requested one if it exists, else latest, else None."""
+    ids = {v.get("id") for v in versioning.list_versions(PROCESSED)}
+    if version and version in ids:
+        return version
+    return versioning.latest_version(PROCESSED)
+
+
+def _artifact_path(name: str, version: str | None) -> Path:
+    """Path to artifact ``name`` in the resolved version dir, else the flat file."""
+    vid = _resolve_version(version)
+    if vid is not None:
+        p = PROCESSED / "versions" / vid / name
+        if p.exists():
+            return p
+    return PROCESSED / name
+
+
+def _load_json(name: str, version: str | None, default):
+    return _read_json(_artifact_path(name, version), default)
+
+
+def overview(version: str | None = None) -> dict:
+    ideas = _load_json("ideas.json", version, [])
+    screened = _load_json("screened.json", version, [])
     verdicts = {"pursue": 0, "review": 0, "kill": 0}
     for e in screened:
         verdicts[e.get("verdict", "kill")] = verdicts.get(e.get("verdict", "kill"), 0) + 1
@@ -112,8 +141,8 @@ def overview() -> dict:
         "evaluated": len(screened),
         "verdicts": verdicts,
         "factor_names": _factor_names(),
-        "last_generate": _mtime_iso(PROCESSED / "ideas.json"),
-        "last_evaluate": _mtime_iso(PROCESSED / "screened.json"),
+        "last_generate": _mtime_iso(_artifact_path("ideas.json", version)),
+        "last_evaluate": _mtime_iso(_artifact_path("screened.json", version)),
         "judged_by_llm": any(e.get("judged_by") == "llm" for e in screened),
     }
 
@@ -137,8 +166,11 @@ def top3() -> dict:
     screened.json is pre-sorted by idea_eval (_sort): verdict order
     (pursue < review < kill), then -eval_score, then idea_id — so the first
     three surviving entries are exactly the ranked top-3. No LLM, no writes.
+
+    Reads the *latest* committed version's screened.json (falls back to the flat
+    file when no versions exist).
     """
-    path = PROCESSED / "screened.json"
+    path = _artifact_path("screened.json", None)
     screened = _read_json(path, [])
     survivors = [e for e in screened if e.get("verdict") in _SURVIVING_VERDICTS][:3]
     mtime = _mtime_iso(path)  # None if file missing
@@ -287,9 +319,10 @@ class Handler(BaseHTTPRequestHandler):
 
     # -- routing --
     def do_GET(self):
-        path = urlparse(self.path).path
+        parsed = urlparse(self.path)
+        path = parsed.path
         if path.startswith("/api/"):
-            return self._api_get(path)
+            return self._api_get(path, parse_qs(parsed.query))
         return self._serve_static(path)
 
     def do_POST(self):
@@ -331,7 +364,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"error": f"{type(exc).__name__}: {exc}"}, 500)
         return self._json({"error": "not found"}, 404)
 
-    def _api_get(self, path):
+    def _api_get(self, path, query=None):
+        query = query or {}
         if path == "/api/me":
             return self._json({"auth": _auth_enabled(), "authed": self._authed()})
         # machine endpoint: Bearer-key auth, separate from the browser cookie session
@@ -344,13 +378,16 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"error": f"{type(exc).__name__}: {exc}"}, 500)
         if not self._authed():
             return self._json({"error": "unauthorized"}, 401)
+        version = (query.get("version") or [None])[0]
         try:
+            if path == "/api/versions":
+                return self._json(versioning.list_versions(PROCESSED))
             if path == "/api/overview":
-                return self._json(overview())
+                return self._json(overview(version))
             if path == "/api/ideas":
-                return self._json(_read_json(PROCESSED / "ideas.json", []))
+                return self._json(_load_json("ideas.json", version, []))
             if path == "/api/decisions":
-                return self._json(_read_json(PROCESSED / "screened.json", []))
+                return self._json(_load_json("screened.json", version, []))
             if path == "/api/signals":
                 return self._json(signals())
         except Exception as exc:  # noqa: BLE001

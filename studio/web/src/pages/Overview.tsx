@@ -16,13 +16,13 @@ const STAGES = [
   { t: "决策备忘", d: "定夺", llm: false },
 ];
 
-export function Overview() {
+export function Overview({ version }: { version?: string }) {
   const [o, setO] = useState<OverviewT | null>(null);
   const [err, setErr] = useState("");
 
   useEffect(() => {
-    api.overview().then(setO).catch((e) => setErr((e as Error).message));
-  }, []);
+    api.overview(version).then(setO).catch((e) => setErr((e as Error).message));
+  }, [version]);
 
   if (err) return <div className="empty">{err}</div>;
   if (!o) return <div className="empty"><span className="spinner" /> 加载中…</div>;

@@ -7,14 +7,14 @@ import { VERDICT_LABEL } from "../labels";
 const FILTERS: (Verdict | "all")[] = ["all", "pursue", "review", "kill"];
 const FILTER_LABEL: Record<string, string> = { all: "全部", ...VERDICT_LABEL };
 
-export function Decisions() {
+export function Decisions({ version }: { version?: string }) {
   const [rows, setRows] = useState<Decision[] | null>(null);
   const [err, setErr] = useState("");
   const [filter, setFilter] = useState<Verdict | "all">("all");
 
   useEffect(() => {
-    api.decisions().then(setRows).catch((e) => setErr((e as Error).message));
-  }, []);
+    api.decisions(version).then(setRows).catch((e) => setErr((e as Error).message));
+  }, [version]);
 
   const shown = useMemo(
     () => (rows ?? []).filter((r) => filter === "all" || r.verdict === filter),

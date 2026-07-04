@@ -1,4 +1,6 @@
-import type { Decision, Idea, Overview, Signal } from "./types";
+import type { Decision, Idea, Overview, Signal, Version } from "./types";
+
+const vq = (version?: string) => (version ? `?version=${encodeURIComponent(version)}` : "");
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
@@ -18,9 +20,10 @@ export const api = {
     req<{ ok: boolean }>("/api/login", { method: "POST", body: JSON.stringify({ password }) }),
   logout: () => req<unknown>("/api/logout", { method: "POST" }),
 
-  overview: () => req<Overview>("/api/overview"),
-  ideas: () => req<Idea[]>("/api/ideas"),
-  decisions: () => req<Decision[]>("/api/decisions"),
+  versions: () => req<Version[]>("/api/versions"),
+  overview: (version?: string) => req<Overview>(`/api/overview${vq(version)}`),
+  ideas: (version?: string) => req<Idea[]>(`/api/ideas${vq(version)}`),
+  decisions: (version?: string) => req<Decision[]>(`/api/decisions${vq(version)}`),
   signals: () => req<Signal[]>("/api/signals"),
 
   generate: (body: Record<string, unknown>) =>

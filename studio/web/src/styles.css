@@ -54,6 +54,18 @@ h1, h2, h3 { margin: 0; font-weight: 650; letter-spacing: -0.01em; }
 .brand .name { font-weight: 700; letter-spacing: -0.02em; }
 .brand .name small { display: block; color: var(--text-faint); font-weight: 500; font-size: 11px; letter-spacing: 0.04em; }
 
+.version-picker { padding: 0 8px 14px; }
+.version-picker label {
+  display: block; color: var(--text-faint); font-size: 11px;
+  text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px;
+}
+.version-picker select {
+  width: 100%; background: var(--bg-elev-2); color: var(--text);
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
+  padding: 7px 9px; font-size: 12px; font-family: var(--mono); cursor: pointer;
+}
+.version-picker select:disabled { color: var(--text-faint); cursor: default; }
+
 .nav { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
 .nav button {
   display: flex; align-items: center; gap: 10px;
