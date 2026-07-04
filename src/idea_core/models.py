@@ -24,6 +24,12 @@ SOURCE_EXTERNAL = "external_event"   # outside-world signal: launches, trends, p
 SOURCE_BRAIN = "brain_inbox"         # ideas the founder jotted down
 SOURCE_PERSONA = "pain_persona"      # simulated target-user pain analysis
 
+
+def bucket_of(source: str) -> str:
+    """漏斗粗排/打散的来源桶(共享契约,两半都用):英文 HN 市场机会 vs 中文(人群/灵感/独占)。
+    住 idea_core 而非 idea_gen —— 两半只依赖 idea_core、绝不互相依赖(隔离铁律)。"""
+    return "en" if source == SOURCE_EXTERNAL else "zh"
+
 CONFIDENCE_REAL = "real"
 CONFIDENCE_SYNTHETIC = "synthetic"   # persona-simulated, treat with suspicion
 

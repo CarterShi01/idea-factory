@@ -1,0 +1,39 @@
+{
+  "_doc": "Idea 漏斗参数(召回→粗排→精排→打散)。见 docs/design/idea-funnel.md。创始人 2026-07-04 拍板:中文为主、英文桶 founder_fit 次要参与、切分 200/50/25/20。改这里即调漏斗,不动代码。",
+
+  "cut_sizes": {
+    "recall_n": 200,
+    "coarse_k": 50,
+    "fine_k": 25,
+    "ui_n": 20
+  },
+
+  "coarse": {
+    "_note": "粗排按来源分桶用不同权重集。external_event(英文HN)主靠热度+需求,founder_fit 次要;pain_persona/brain_inbox(中文人群/灵感)主靠 founder_fit×痛点。权重和各为 1.0。",
+    "weights_by_source": {
+      "external_event": {
+        "market_freshness": 0.25, "payment_signal": 0.22, "pain_intensity": 0.20,
+        "founder_fit": 0.12, "competition_density": 0.08, "build_cost": 0.08, "moat_signal": 0.05
+      },
+      "default": {
+        "founder_fit": 0.30, "pain_intensity": 0.24, "payment_signal": 0.18,
+        "moat_signal": 0.10, "market_freshness": 0.08, "build_cost": 0.06, "competition_density": 0.04
+      }
+    }
+  },
+
+  "founder_fit": {
+    "_note": "founder_fit 复合因子的子权重(读 config/founder.json)。渠道独占最重,anti-fit 作硬扣。",
+    "distribution_monopoly": 0.55,
+    "lang_region_moat": 0.25,
+    "network_leverage": 0.20,
+    "anti_fit_penalty": 0.30
+  },
+
+  "diversify": {
+    "_note": "终端 UI_N 篇的桶间配额 + 单一创始人边上限。中文为主。zh 桶=pain_persona+brain_inbox+蒙语/安全云等中文独占;en 桶=external_event。",
+    "ui_quota": { "zh_min": 14, "en_max": 6 },
+    "per_edge_cap": 6,
+    "dedup_jaccard": 0.6
+  }
+}

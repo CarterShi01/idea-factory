@@ -491,6 +491,73 @@ def moat_signal(c: IdeaCandidate) -> float:
     return round(max(0.05, min(1.0, score)), 4)
 
 
+# anti-fit 词表(config/founder.json 的 anti_fit 落成判别):这些方向对这位创始人是硬伤
+# ——纯投放冷启动 to-C(没钱买量)、需大团队/长周期/靠融资续命、重资产/硬件自研/需牌照重合规。
+# founder_fit 命中即扣分。与 _COMPLEXITY_HEAVY/_MED 有意重叠(重资产/合规既贵又不 fit)。
+_ANTI_FIT = {
+    "paid ads", "buy traffic", "performance marketing", "ad spend", "growth team",
+    "large team", "raise funding", "venture-backed", "burn cash", "years to profit",
+    "hardware manufacturing", "own hardware", "medical device", "financial license",
+    "投放", "买量", "付费投放", "烧钱", "大团队", "融资续命", "靠融资", "重资产",
+    "硬件自研", "自研硬件", "医疗器械", "金融牌照", "重合规", "长周期不赚钱",
+}
+
+
+def founder_fit(c: IdeaCandidate) -> float:
+    """这位创始人做**这条 idea** 的适配度(个人画像一等排序信号)。Higher = 更适合他。
+
+    漏斗设计(docs/design/idea-funnel.md)把 founder-fit 从散落的降级旗升为一个贯穿
+    粗排+精排的复合因子。纯函数、读 config/founder.json(经模块级词表已折入,见
+    _load_founder_reach / _CHANNEL_*),守 candidate->float 契约。综合四轴:
+
+    * 渠道独占(distribution_fit,最重)——蒙语/内蒙区域、家人信任 > B2B 引荐 > 公开;
+    * 语言/区域护城河(_MOAT_LANG_REGION)——他最硬、别人抄不了的壁垒;
+    * 人脉杠杆(_CHANNEL_REFERRAL)——安全云/医生/心理教授/海外硬件的现成关系;
+    * anti-fit 硬扣(_ANTI_FIT + 重资产复杂度)——烧钱投放/需团队融资/重资产牌照 = 压低。
+
+    子权重来自 config/funnel.json 的 founder_fit(缺省用内置默认)。
+    """
+    text = c.text()
+    w = _load_funnel_founder_weights()
+
+    dist = distribution_fit(c)  # 0.05-0.95,渠道独占三档
+    lr = _saturating(_count_hits(text, _MOAT_LANG_REGION), half=1.5)
+    net = _saturating(_count_hits(text, _CHANNEL_REFERRAL), half=2.0)
+    anti = _count_hits(text, _ANTI_FIT) + _count_hits(text, _COMPLEXITY_HEAVY)
+
+    score = (
+        w["distribution_monopoly"] * dist
+        + w["lang_region_moat"] * lr
+        + w["network_leverage"] * net
+    )
+    score -= w["anti_fit_penalty"] * _saturating(anti, half=1.5)
+    return round(max(0.0, min(1.0, score)), 4)
+
+
+_FUNNEL_FF_DEFAULT = {
+    "distribution_monopoly": 0.55,
+    "lang_region_moat": 0.25,
+    "network_leverage": 0.20,
+    "anti_fit_penalty": 0.30,
+}
+
+
+def _load_funnel_founder_weights() -> dict[str, float]:
+    """founder_fit 子权重(config/funnel.json → founder_fit),缺失走内置默认。纯读、容错。"""
+    import json as _json
+    import os as _os
+    from pathlib import Path as _Path
+
+    try:
+        p = _Path(_os.environ.get("IDEA_FUNNEL_CONFIG", "config/funnel.json"))
+        if p.exists():
+            cfg = _json.loads(p.read_text(encoding="utf-8")).get("founder_fit", {})
+            return {k: float(cfg.get(k, v)) for k, v in _FUNNEL_FF_DEFAULT.items()}
+    except Exception:  # noqa: BLE001 — bad config never breaks factor compute
+        pass
+    return dict(_FUNNEL_FF_DEFAULT)
+
+
 def competition_density(c: IdeaCandidate) -> float:
     """Higher = *less* crowded (a better score).
 
@@ -570,6 +637,9 @@ FACTORS = {
     "competition_density": competition_density,
     "distribution_fit": distribution_fit,
     "payment_signal": payment_signal,
+    # 漏斗:founder_fit 复合因子(个人画像一等排序信号)。additive、向后兼容——
+    # idea_eval 迭代 FACTORS、studio 动态渲染都自动吸收;不入 alpha 权重的旧路径按 0 权重忽略。
+    "founder_fit": founder_fit,
 }
 
 # Chinese display labels for the factor keys (keys stay English identifiers).
@@ -581,6 +651,7 @@ FACTOR_LABELS = {
     "competition_density": "竞争稀缺度",
     "distribution_fit": "触达匹配度",
     "payment_signal": "付费信号",
+    "founder_fit": "创始人适配",
 }
 
 

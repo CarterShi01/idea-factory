@@ -92,6 +92,11 @@ def run_evaluation(
             evaluations, ideas_by_id, judge_be, load_step_config("judge")
         )
 
+    # 漏斗第 4 层 打散:把精排幸存者按 来源配额(中文为主)+ 单边上限 + 去聚类 选出终端组合,
+    # 排到头部(WebUI/top3 读头部即得多样化的 UI_N)。不改判决,只改顺序。
+    ideas_by_id = {i.get("id", ""): i for i in ideas}
+    evaluations = evaluate.diversify_select(evaluations, ideas_by_id)
+
     json_path = output_dir / "screened.json"
     memos_path = output_dir / "decision_memos.md"
     export.write_json(evaluations, json_path)

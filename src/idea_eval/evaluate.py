@@ -76,6 +76,7 @@ _ASSUMPTION = {
     "competition_density": "假设还有差异化空间——但赛道看起来已经拥挤。",
     "moat_signal": "假设你能建立护城河——但防御性尚不清晰。",
     "payment_signal": "假设真有人愿意为此付费——目前没有可信的付费证据。",
+    "founder_fit": "假设这条真的适合你做——但它没杠杆你的独占优势(蒙语/安全云/人脉),换个人成功率不变。",
 }
 _EXPERIMENT = {
     "pain_intensity": "做 5 场问题访谈 + 在 3 个社群发帖描述痛点；看是否有人主动说“我愿意付费”。（1 周，0 元）",
@@ -85,6 +86,7 @@ _EXPERIMENT = {
     "competition_density": "注册排名前 3 的竞品；记录你要切入的那个差距。（2 天，<100 元）",
     "moat_signal": "明确一个能锁住用户的工作流或数据资产；找 3 个用户验证。（3 天，0 元）",
     "payment_signal": "拿一个假落地页 + 价格,投 50 个目标用户,看有几个点『立即购买/预付』。（1 周，<100 元）",
+    "founder_fit": "写清这条具体杠杆你哪项独占资源(蒙语/内蒙信任/安全云引荐);找 1 个只有你能拿到的资源验证。（2 天，0 元）",
 }
 
 
@@ -210,6 +212,108 @@ def _sort(evaluations: list[Evaluation]) -> list[Evaluation]:
     # pursue first, then review, then kill; within a band by score desc.
     evaluations.sort(key=lambda e: (_VERDICT_ORDER[e.verdict], -e.eval_score, e.idea_id))
     return evaluations
+
+
+# --- 打散 Diversify(漏斗第 4 层):从精排幸存者选终端 UI_N 组合 -----------------
+
+_EDGE_VOCAB = {
+    "蒙语": ("蒙语", "蒙古", "蒙文", "内蒙", "蒙汉"),
+    "安全云": ("安全云", "安全厂商", "云厂商", "等保", "云安全", "secops"),
+    "出海硬件": ("出海", "硬件", "中东", "跨境", "海外"),
+    "医疗心理": ("慢病", "医院", "医生", "心理", "焦虑", "失眠", "卫生"),
+}
+
+
+def _edge_of(idea: dict, source: str) -> str:
+    """把候选归到一个『创始人边』桶,供打散做单边上限(防终端 20 全是同一边)。"""
+    blob = f"{idea.get('title','')} {idea.get('target_user','')} {idea.get('pain','')}".lower()
+    for edge, terms in _EDGE_VOCAB.items():
+        if any(t in blob for t in terms):
+            return edge
+    return "英文市场" if source == "external_event" else "其它中文"
+
+
+def _tok(s: str) -> set:
+    import re
+    return set(re.findall(r"[\w一-鿿]+", (s or "").lower()))
+
+
+def _jac(a: set, b: set) -> float:
+    return len(a & b) / len(a | b) if (a and b) else 0.0
+
+
+def _load_funnel_diversify() -> dict:
+    import json as _json
+    import os as _os
+    from pathlib import Path as _Path
+
+    default = {"ui_n": 20, "zh_min": 14, "en_max": 6, "per_edge_cap": 6, "dedup_jaccard": 0.6}
+    try:
+        p = _Path(_os.environ.get("IDEA_FUNNEL_CONFIG", "config/funnel.json"))
+        if p.exists():
+            cfg = _json.loads(p.read_text(encoding="utf-8"))
+            d = cfg.get("diversify", {}) or {}
+            q = d.get("ui_quota", {}) or {}
+            n = int((cfg.get("cut_sizes", {}) or {}).get("ui_n", default["ui_n"]))
+            return {
+                "ui_n": n,
+                "zh_min": int(q.get("zh_min", default["zh_min"])),
+                "en_max": int(q.get("en_max", default["en_max"])),
+                "per_edge_cap": int(d.get("per_edge_cap", default["per_edge_cap"])),
+                "dedup_jaccard": float(d.get("dedup_jaccard", default["dedup_jaccard"])),
+            }
+    except Exception:  # noqa: BLE001
+        pass
+    return default
+
+
+def diversify_select(
+    evaluations: list[Evaluation],
+    ideas_by_id: dict[str, dict],
+    cfg: dict | None = None,
+) -> list[Evaluation]:
+    """打散:把精排幸存者(非 kill)按『来源桶配额 + 单边上限 + 近重去聚类』选出终端 UI_N 组合,
+    排到列表**头部**(组合序),其余幸存者、再 kill 随后。WebUI / top3 读头部即得多样化的 20。
+
+    中英混合的落点:``en_max`` 硬顶英文桶(→ 中文自然 ≥ zh_min),单边上限防"一色蒙语"。
+    幸存者不足 UI_N 时放宽配额回填,保证长度。不改判决,只改**顺序**。
+    """
+    cfg = cfg or _load_funnel_diversify()
+    from idea_core.models import bucket_of
+
+    survivors = [e for e in evaluations if e.verdict != KILL]
+    killed = [e for e in evaluations if e.verdict == KILL]
+    survivors.sort(key=lambda e: (-e.eval_score, e.idea_id))
+
+    picked: list[Evaluation] = []
+    rest: list[Evaluation] = []
+    en_n = 0
+    edge_count: dict[str, int] = {}
+    seen: list[set] = []
+    ui_n, en_max, edge_cap, dj = cfg["ui_n"], cfg["en_max"], cfg["per_edge_cap"], cfg["dedup_jaccard"]
+
+    for e in survivors:
+        if len(picked) >= ui_n:
+            rest.append(e); continue
+        idea = ideas_by_id.get(e.idea_id, {})
+        src = idea.get("source", "")
+        bkt, edge = bucket_of(src), _edge_of(idea, src)
+        toks = _tok(f"{e.title} {idea.get('pain','')}")
+        if bkt == "en" and en_n >= en_max:
+            rest.append(e); continue
+        if edge_count.get(edge, 0) >= edge_cap:
+            rest.append(e); continue
+        if any(_jac(toks, s) >= dj for s in seen):
+            rest.append(e); continue
+        picked.append(e); seen.append(toks)
+        edge_count[edge] = edge_count.get(edge, 0) + 1
+        if bkt == "en":
+            en_n += 1
+    # 幸存者充足但被配额/去重挡下导致不足 UI_N → 放宽回填(只保长度,不再卡配额)
+    if len(picked) < ui_n:
+        need = ui_n - len(picked)
+        picked.extend(rest[:need]); rest = rest[need:]
+    return picked + rest + killed
 
 
 def evaluate_all(ideas: list[dict], floor: float = DEFAULT_FLOOR) -> list[Evaluation]:

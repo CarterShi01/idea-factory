@@ -32,7 +32,7 @@ import re
 from datetime import date
 
 from idea_core.factors import compute_factors
-from idea_core.models import IdeaCandidate, ScoredCandidate
+from idea_core.models import IdeaCandidate, ScoredCandidate, bucket_of
 
 DEFAULT_WEIGHTS = {
     # ff2: distribution_fit 升为与 pain_intensity 并列的排序主力(0.05→0.25),
@@ -74,6 +74,27 @@ def _decay(observed_on: str, today: date) -> float:
     return _DECAY_FLOOR + (1 - _DECAY_FLOOR) * raw
 
 
+def _load_funnel() -> dict:
+    """漏斗参数(config/funnel.json):切分量 + 分桶权重 + 打散配额。缺失/坏档走内置默认。"""
+    import json as _json
+    import os as _os
+    from pathlib import Path as _Path
+
+    try:
+        p = _Path(_os.environ.get("IDEA_FUNNEL_CONFIG", "config/funnel.json"))
+        if p.exists():
+            return _json.loads(p.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001 — bad config never breaks ranking
+        pass
+    return {}
+
+
+def _weights_for(source: str, funnel: dict) -> dict[str, float]:
+    """按来源取粗排权重集(funnel.coarse.weights_by_source);缺则用 DEFAULT_WEIGHTS。"""
+    by_src = (funnel.get("coarse", {}) or {}).get("weights_by_source", {})
+    return by_src.get(source) or by_src.get("default") or DEFAULT_WEIGHTS
+
+
 def score_candidate(
     candidate: IdeaCandidate,
     today: date,
@@ -100,7 +121,35 @@ def score(
     today: date,
     weights: dict[str, float] | None = None,
 ) -> list[ScoredCandidate]:
-    return [score_candidate(c, today, weights) for c in candidates]
+    """粗排打分。``weights`` 给定 → 全量用它(向后兼容);``None`` → **按来源分桶**取权重
+    (英文HN主靠热度+需求、中文主靠 founder_fit×痛点,见 config/funnel.json)。"""
+    if weights is not None:
+        return [score_candidate(c, today, weights) for c in candidates]
+    funnel = _load_funnel()
+    return [score_candidate(c, today, _weights_for(c.source, funnel)) for c in candidates]
+
+
+def coarse_select(
+    ranked: list[ScoredCandidate],
+    k: int,
+    en_frac: float = 0.4,
+) -> list[ScoredCandidate]:
+    """粗排切分:200 → ~k。**分桶保量**——给英文桶留 ``en_frac`` 配额、其余给中文桶,
+    各桶内按已排序(alpha/MMR)顺序取,某桶不足则另一桶回填,凑满 k。这样贵的精排(LLM)
+    只碰这 k 条,且中英两桶都不会在粗排就被饿死(下游打散配额才有料可分)。"""
+    if k <= 0:
+        return []
+    if len(ranked) <= k:
+        return list(ranked)
+    en = [s for s in ranked if bucket_of(s.candidate.source) == "en"]
+    zh = [s for s in ranked if bucket_of(s.candidate.source) == "zh"]
+    en_k = min(len(en), round(k * en_frac))
+    zh_k = min(len(zh), k - en_k)
+    en_k = min(len(en), k - zh_k)  # 中文不足时英文回填
+    picked = en[:en_k] + zh[:zh_k]
+    # 保持全局 alpha/MMR 顺序(ranked 已是有序,按其原次序还原)
+    keep = {id(s) for s in picked}
+    return [s for s in ranked if id(s) in keep]
 
 
 def _tokens(c: IdeaCandidate) -> set[str]:

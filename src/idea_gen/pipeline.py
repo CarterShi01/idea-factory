@@ -114,17 +114,21 @@ def run_pipeline(
 
         update_derived(candidates, load_taxonomy(), data_dir / "state" / "derived_segments.json")
 
+    # 5. 粗排(召回→粗排):按来源分桶因子打分 + MMR 排序 + 切到 coarse_k。
+    # 漏斗(docs/design/idea-funnel.md):idea_gen 负责召回+粗排,ideas.json 从"全量转储"
+    # 升级为"粗排后的候选池"——贵的 LLM 精排(idea_eval)只碰这一池,不再跑全量。
+    funnel = ranks._load_funnel()
+    coarse_k = int((funnel.get("cut_sizes", {}) or {}).get("coarse_k", 50))
     scored = ranks.score(candidates, today=today, weights=weights)
     ranked = ranks.rank(scored)
-    # Round 3(投资人复评 #3:Top-N 被近重挤占)。在导出前对头部做一次硬去聚类,
-    # 让每日 N 条摘要不被"语音备忘转任务"这类近似重复占满(提升 Non-Duplicate Ratio)。
-    # JSON 仍写完整 ranked(下游 idea-eval 看全量),只有人看的摘要走多样性选择。
-    digest = ranks.select_diverse_top_n(ranked, n=top_n)
+    coarse = ranks.coarse_select(ranked, coarse_k)
+    # 人看的摘要在粗排池上再做一次硬去聚类(防近重刷屏)。
+    digest = ranks.select_diverse_top_n(coarse, n=top_n)
 
-    # 7. export
+    # 7. export —— ideas.json = 粗排池(给 idea_eval 精排),ideas.md = 摘要
     json_path = output_dir / "ideas.json"
     md_path = output_dir / "ideas.md"
-    export.write_json(ranked, json_path)
+    export.write_json(coarse, json_path)
     export.write_markdown(digest, md_path, today=today, top_n=top_n)
 
     return PipelineResult(
@@ -132,7 +136,7 @@ def run_pipeline(
         signal_count=len(signals),
         deduped_count=len(kept),
         candidate_count=len(candidates),
-        scored=ranked,
+        scored=coarse,
         json_path=json_path,
         markdown_path=md_path,
     )
