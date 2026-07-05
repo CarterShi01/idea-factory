@@ -11,7 +11,7 @@ requires-python = ">=3.10"
 dependencies = []
 
 [project.optional-dependencies]
-dev = ["pytest>=7.0"]
+dev = ["pytest>=7.0", "pyyaml>=6.0"]  # pyyaml: test-only, parses dify/flows/*.yml for the §3.3 mirror-invariant test
 # 可选爬虫层：连 Windows VPS 已登录 Chrome（playwright CDP）+ Scrapling 自适应解析。
 # 仅在启用 vps_browser 源时安装：pip install -e '.[stealth]' && playwright install chromium
 stealth = ["scrapling>=0.3", "playwright>=1.40"]

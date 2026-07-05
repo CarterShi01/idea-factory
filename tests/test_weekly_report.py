@@ -65,3 +65,15 @@ def test_weekly_report_smoke_test_uses_first_10_customers_and_pricing_evidence(t
     text = path.read_text(encoding="utf-8")
     assert "在相关社群发帖招募" in text
     assert "29USD" in text
+
+
+def test_weekly_report_renders_persona_objections(tmp_path):
+    e = Evaluation(idea_id="a", title="A", verdict=PURSUE, eval_score=90, persona_objections=[
+        {"persona": "蒙语母语中老年人", "objection": "我不识字看不懂这个界面"},
+    ])
+    path = tmp_path / "weekly_report.md"
+    write_weekly_report([e], {"a": _idea("a")}, path, week="2026-W27")
+
+    text = path.read_text(encoding="utf-8")
+    assert "人群反对声" in text
+    assert "蒙语母语中老年人：我不识字看不懂这个界面" in text

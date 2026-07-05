@@ -124,6 +124,15 @@ class Evaluation:
     evidence_missing: list[str] = field(default_factory=list)
     evidence_demoted: bool = False   # True if an ungrounded pursue was demoted to review
     forced_downgrade: bool = False   # True if demoted by the batch pursue-fraction cap
+    # Structured, citable judge reasoning (opt-in, only populated when the judge
+    # prompt asks for it -- see judge_survivors/config/llm/judge.json). Each item
+    # is {"claim": str, "evidence_ids": list[str]}; evidence_ids referencing an
+    # id not in `evidence` are stripped by enforce_citation.
+    judge_reasons: list[dict] = field(default_factory=list)
+    citation_demoted: bool = False   # True if an un-cited kill (with real evidence) was demoted
+    # §5⑥ optional sub-step (idea_eval.persona_pressure): advisory only, never
+    # changes verdict/tier. Each item is {"persona": str, "objection": str}.
+    persona_objections: list[dict] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -385,6 +394,41 @@ def enforce_evidence_grounding(evaluations: list[Evaluation]) -> list[Evaluation
     return _sort(evaluations)
 
 
+def enforce_citation(evaluations: list[Evaluation]) -> list[Evaluation]:
+    """Validate the judge's ``judge_reasons`` against the candidate's own evidence.
+
+    Two things happen, both scoped to LLM-judged evaluations only (``judged_by
+    == "llm"``) -- the deterministic rule kill-gate never looks at evidence at
+    all, so it isn't second-guessed here:
+
+    1. **Strip hallucinated citations.** An ``evidence_ids`` entry that doesn't
+       match any id in ``e.evidence`` is dropped (the judge cited evidence that
+       doesn't exist -- treat the claim as uncited, not as validated).
+    2. **Demote an un-cited KILL.** If real evidence exists for a candidate but
+       none of the judge's reasons actually cite any of it, a KILL verdict is
+       not trustworthy on its own -- demote to REVIEW (mirrors
+       :func:`enforce_evidence_grounding`'s treatment of an ungrounded PURSUE).
+
+    Must run after :func:`apply_evidence` and :func:`judge_survivors`.
+    """
+    for e in evaluations:
+        valid_ids = {ev.get("id") for ev in e.evidence}
+        cited_any = False
+        cleaned: list[dict] = []
+        for r in e.judge_reasons:
+            ids = [i for i in r.get("evidence_ids", []) if i in valid_ids]
+            if ids:
+                cited_any = True
+            cleaned.append({"claim": r.get("claim", ""), "evidence_ids": ids})
+        e.judge_reasons = cleaned
+
+        if e.judged_by == "llm" and e.verdict == KILL and e.evidence and not cited_any:
+            e.verdict = REVIEW
+            e.citation_demoted = True
+            e.risk_flags.append("有真实证据但裁决理由未引用任何证据编号——淘汰不予采信,按需补证据复核处理。")
+    return _sort(evaluations)
+
+
 DEFAULT_MAX_PURSUE_FRAC = 0.5
 
 
@@ -416,6 +460,23 @@ def enforce_forced_distribution(
 # --- B-prep: devil's advocate critique -----------------------------------
 
 
+def _evidence_block(evidence: list[dict]) -> str:
+    """Render a candidate's fetched evidence (idea_eval.enrich) for the critique/judge
+    prompt. Empty when enrich never ran or found nothing -- critique/judge must not
+    invent evidence in that case (the prompt says so explicitly).
+    """
+    if not evidence:
+        return "（暂无证据 —— 未跑证据门,或跑了但没查到任何相关证据。不要假装有证据支撑,也不要因为没证据就直接判死;倾向 review。）"
+    lines = []
+    for ev in evidence:
+        stale = " ⚠️已过24月失效" if not ev.get("valid", True) else ""
+        lines.append(
+            f"- id={ev.get('id', '')} [{ev.get('kind', '')}] {ev.get('summary', '')} "
+            f"{ev.get('numbers', {})}（{ev.get('source_date', '')}）{stale}"
+        )
+    return "\n".join(lines)
+
+
 def _survivor_fields(e: Evaluation, idea: dict) -> dict:
     return {
         "title": e.title,
@@ -433,7 +494,37 @@ def _survivor_fields(e: Evaluation, idea: dict) -> dict:
         "why_only_me": idea.get("why_only_me", ""),
         "first_10_customers": idea.get("first_10_customers", ""),
         "copy_fails_because": idea.get("copy_fails_because", ""),
+        # pipeline-v2 §5⑤:只在 require_evidence 跑过 apply_evidence 后才非空;
+        # render_template 对未用到的占位符是安全的,旧 prompt 不受影响。
+        "evidence_block": _evidence_block(e.evidence),
     }
+
+
+def _log_trace_batch(
+    trace_data_dir,
+    trace_run_id: str | None,
+    stage: str,
+    requests: list,
+    responses: dict,
+    prompt_version: str,
+) -> None:
+    """Best-effort: log every request/response pair in a batch to the ledger's
+    per-run trace (§6 M6 single-idea trace view). No-op unless both
+    ``trace_data_dir``/``trace_run_id`` are given -- opt-in, zero cost otherwise.
+    """
+    if trace_data_dir is None or trace_run_id is None:
+        return
+    from idea_core import ledger
+
+    for req in requests:
+        r = responses.get(req.id)
+        ledger.log_trace(
+            trace_data_dir, trace_run_id, stage, req.id,
+            prompt_version=prompt_version,
+            request={"system": req.system, "user": req.user},
+            response=(r.to_dict() if r else {}),
+            model=req.model or "",
+        )
 
 
 def critique_survivors(
@@ -441,6 +532,8 @@ def critique_survivors(
     ideas_by_id: dict[str, dict],
     llm,
     config: dict,
+    trace_data_dir=None,
+    trace_run_id: str | None = None,
 ) -> list[Evaluation]:
     """Run an adversarial 'devil's advocate' pass over the rule-gate survivors.
 
@@ -448,6 +541,10 @@ def critique_survivors(
     doomed_assumption, with no scoring or final verdict. Output is then fed into
     ``judge_survivors`` so the judge has to engage with the strongest objections
     rather than rubber-stamp the generator's output (anti-self-enhancement).
+
+    ``trace_data_dir``/``trace_run_id`` (opt-in, default None): when both given,
+    every request/response is logged to the ledger's trace for the single-idea
+    trace view (§6 M6). No-op otherwise.
 
     Mutates ``evaluations`` in place (no re-sort — verdicts unchanged here).
     May raise ``idea_core.llm.PendingHandoff`` (CC-handoff mode); let it propagate.
@@ -465,7 +562,9 @@ def critique_survivors(
         user = render_template(template, _survivor_fields(e, idea))
         requests.append(build_request(e.idea_id, user, config))
 
-    responses = {r.id: r for r in llm.complete(requests)}
+    responses_list = llm.complete(requests)
+    responses = {r.id: r for r in responses_list}
+    _log_trace_batch(trace_data_dir, trace_run_id, "critique", requests, responses, config.get("step", "critique"))
     for e in survivors:
         r = responses.get(e.idea_id)
         if not (r and r.ok and r.data):
@@ -499,6 +598,8 @@ def judge_survivors(
     ideas_by_id: dict[str, dict],
     llm,
     config: dict,
+    trace_data_dir=None,
+    trace_run_id: str | None = None,
 ) -> list[Evaluation]:
     """Run the LLM judge (B) over the rule-gate survivors only (Top-K, token-thrifty).
 
@@ -509,6 +610,9 @@ def judge_survivors(
     If ``critique_survivors`` ran first and populated ``e.critique``, the judge
     user prompt injects it via the ``{critique}`` placeholder and the judge must
     fill ``respond_to_critique`` — forcing engagement with the strongest objection.
+
+    ``trace_data_dir``/``trace_run_id``: see :func:`critique_survivors` -- same
+    opt-in trace logging, stage name ``"diligence"``.
 
     May raise ``idea_core.llm.PendingHandoff`` (CC-handoff mode); let it propagate.
     """
@@ -526,7 +630,9 @@ def judge_survivors(
         fields["critique"] = _critique_block(e)
         requests.append(build_request(e.idea_id, render_template(template, fields), config))
 
-    responses = {r.id: r for r in llm.complete(requests)}
+    responses_list = llm.complete(requests)
+    responses = {r.id: r for r in responses_list}
+    _log_trace_batch(trace_data_dir, trace_run_id, "diligence", requests, responses, config.get("step", "judge"))
     for e in survivors:
         r = responses.get(e.idea_id)
         if not (r and r.ok and r.data):
@@ -549,6 +655,16 @@ def judge_survivors(
             if conf == "low" and e.verdict in (PURSUE, KILL):
                 e.verdict = REVIEW
                 e.confidence_demoted = True
+        reasons = d.get("reasons")
+        if isinstance(reasons, list):
+            e.judge_reasons = [
+                {
+                    "claim": str(item.get("claim", "")),
+                    "evidence_ids": [str(x) for x in (item.get("evidence_ids") or []) if x],
+                }
+                for item in reasons
+                if isinstance(item, dict)
+            ]
         sub = d.get("scores")
         if isinstance(sub, dict):
             e.judge_scores = {

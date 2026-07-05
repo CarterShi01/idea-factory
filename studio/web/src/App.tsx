@@ -9,6 +9,7 @@ import { Signals } from "./pages/Signals";
 import { RunPanel } from "./pages/RunPanel";
 import type { Version } from "./types";
 import { Profile } from "./pages/Profile";
+import { Funnel } from "./pages/Funnel";
 
 type Auth = "checking" | "in" | "out";
 
@@ -74,6 +75,7 @@ export function App() {
         {tab === "overview" && <Overview version={version} />}
         {tab === "ideas" && <Ideas version={version} />}
         {tab === "decisions" && <Decisions version={version} />}
+        {tab === "funnel" && <Funnel />}
         {tab === "signals" && <Signals />}
         {tab === "run" && <RunPanel onRan={refresh} />}
         {tab === "profile" && <Profile />}

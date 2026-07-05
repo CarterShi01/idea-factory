@@ -130,6 +130,8 @@ def _signal_fields(signal: Signal, config: dict | None = None) -> dict:
         "source": signal.source,
         "observed_on": signal.observed_on,
         "source_guidance": _source_guidance(signal, config or {}),
+        # pipeline-v2 §5①:钱在流动的地方(招聘/成交/评论类源自带,其余源留空)。
+        "money_trace": signal.money_trace or "(无明确付费痕迹)",
     }
 
 

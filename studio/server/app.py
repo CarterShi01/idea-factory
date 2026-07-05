@@ -34,11 +34,13 @@ FOUNDER_PATH = REPO_ROOT / "config" / "founder.json"
 import sys
 
 sys.path.insert(0, str(REPO_ROOT / "src"))
-from idea_core import versioning  # noqa: E402
-from idea_core.llm import load_dotenv  # noqa: E402
+from idea_core import ledger, versioning  # noqa: E402
+from idea_core.llm import get_backend, load_dotenv, load_step_config  # noqa: E402
 from idea_gen.collect import collect_all  # noqa: E402
 from idea_gen.normalize import normalize  # noqa: E402
 from idea_gen.pipeline import run_pipeline  # noqa: E402
+from idea_eval import evaluate  # noqa: E402
+from idea_eval import stats as eval_stats  # noqa: E402
 from idea_eval.pipeline import run_evaluation  # noqa: E402
 
 load_dotenv(REPO_ROOT / ".env")
@@ -309,6 +311,84 @@ def do_evaluate(body: dict) -> dict:
     return {"evaluated": r.evaluated, "pursue": r.pursue, "review": r.review, "killed": r.killed}
 
 
+# --- pipeline-v2: ledger (funnel / trace / founder-labels) -----------------
+# Read-only views over data/ledger/* (docs/design/pipeline-v2-plan.md §6 M6).
+# Populated only when a run used idea_gen's --use-triage or idea_eval's
+# --require-evidence; an empty ledger just means those opt-in flags haven't
+# been exercised yet, not an error.
+
+
+def ledger_funnel() -> dict:
+    return eval_stats.funnel_report(DATA_DIR)
+
+
+def ledger_verdicts() -> list[dict]:
+    return ledger.read_jsonl(ledger.ledger_dir(DATA_DIR) / ledger.VERDICTS)
+
+
+def ledger_outcomes() -> list[dict]:
+    return ledger.read_outcomes(DATA_DIR)
+
+
+def ledger_trace(run_id: str, stage: str) -> list[dict]:
+    return ledger.read_trace(DATA_DIR, run_id, stage)
+
+
+def do_label(body: dict) -> dict:
+    """Founder UI action (star/kill/override) -> a label event in verdicts.jsonl.
+
+    This is the highest-value data the system collects: every click here is a
+    ground-truth signal, cheaper than a full retro cycle.
+    """
+    candidate_id = (body.get("candidate_id") or "").strip()
+    action = (body.get("action") or "").strip()
+    if not candidate_id or not action:
+        raise ValueError("candidate_id and action are required")
+    extra = {k: v for k, v in body.items() if k not in ("candidate_id", "action")}
+    ledger.log_founder_action(DATA_DIR, candidate_id, action, **extra)
+    return {"ok": True}
+
+
+# Backends sensible for an interactive "try it now" UI call. "cc" is excluded on
+# purpose: CC-handoff writes a job pack and pauses for a human to run Claude Code
+# separately, which defeats the point of an instant what-if rerun.
+_WHATIF_BACKENDS = ("mock", "router", "dify")
+
+
+def do_whatif_judge(body: dict) -> dict:
+    """Re-run ONLY the judge step for one candidate with edited fields.
+
+    Scoped what-if (§6 M6 T6.4: judge stage only, not a generic per-stage rerun
+    harness). Reads the live ideas.json but never writes to disk or the ledger
+    -- the result is shown in the UI and discarded, exactly the "compare
+    without committing" behavior the design calls for.
+    """
+    idea_id = body.get("idea_id", "")
+    overrides = body.get("overrides") or {}
+    backend_name = body.get("backend", "mock")
+    if backend_name not in _WHATIF_BACKENDS:
+        raise ValueError(f"backend must be one of {_WHATIF_BACKENDS} for an interactive what-if run")
+
+    ideas = _load_json("ideas.json", None, [])
+    idea = next((i for i in ideas if i.get("id") == idea_id), None)
+    if idea is None:
+        raise ValueError(f"idea {idea_id!r} not found in ideas.json")
+    merged = {**idea, **overrides}
+
+    ev = evaluate.evaluate_idea(merged, floor=evaluate.DEFAULT_FLOOR)
+    llm = get_backend(backend_name)
+    evaluate.judge_survivors([ev], {idea_id: merged}, llm, load_step_config("judge"))
+    return {
+        "idea_id": idea_id,
+        "verdict": ev.verdict,
+        "eval_score": ev.eval_score,
+        "judged_by": ev.judged_by,
+        "killer_objection": ev.killer_objection,
+        "riskiest_assumption": ev.riskiest_assumption,
+        "judge_reasons": ev.judge_reasons,
+    }
+
+
 # --- HTTP handler ---------------------------------------------------------
 
 _MIME = {
@@ -409,6 +489,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(do_evaluate(body))
             if path == "/api/inbox":
                 return self._json(do_inbox(body))
+            if path == "/api/ledger/label":
+                return self._json(do_label(body))
+            if path == "/api/run/whatif-judge":
+                return self._json(do_whatif_judge(body))
+        except ValueError as exc:  # bad input (missing field, unknown idea/backend) → 400
+            return self._json({"error": str(exc)}, 400)
         except Exception as exc:  # noqa: BLE001 — surface run errors to the UI
             return self._json({"error": f"{type(exc).__name__}: {exc}"}, 500)
         return self._json({"error": "not found"}, 404)
@@ -457,6 +543,18 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(signals())
             if path == "/api/founder-profile":
                 return self._json(read_founder_profile())
+            if path == "/api/ledger/funnel":
+                return self._json(ledger_funnel())
+            if path == "/api/ledger/verdicts":
+                return self._json(ledger_verdicts())
+            if path == "/api/ledger/outcomes":
+                return self._json(ledger_outcomes())
+            if path == "/api/ledger/trace":
+                run_id = (query.get("run_id") or [""])[0]
+                stage = (query.get("stage") or [""])[0]
+                if not run_id or not stage:
+                    return self._json({"error": "run_id and stage query params are required"}, 400)
+                return self._json(ledger_trace(run_id, stage))
         except Exception as exc:  # noqa: BLE001
             return self._json({"error": f"{type(exc).__name__}: {exc}"}, 500)
         return self._json({"error": "not found"}, 404)

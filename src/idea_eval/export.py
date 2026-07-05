@@ -75,6 +75,13 @@ def write_memos(
             lines.append(f"- **评委回应**：{e.judge_rebuttal}")
         if e.killer_objection:
             lines.append(f"- **最致命质疑**：{e.killer_objection}")
+        if e.judge_reasons:
+            lines.append("- **裁决理由**(引用证据编号,见 pipeline-v2-plan.md §5⑥)：")
+            for r in e.judge_reasons:
+                cite = f"（证据:{', '.join(r['evidence_ids'])}）" if r.get("evidence_ids") else "（无证据引用）"
+                lines.append(f"  - {r.get('claim', '')}{cite}")
+        if e.citation_demoted:
+            lines.append("- ⚠️ **该淘汰因未引用证据被自动打回复核**(有真实证据但裁决未引用任何证据编号)。")
         lines += [
             f"- **最危险假设**：{e.riskiest_assumption}",
             f"- **最小验证**：{e.cheap_experiment}",
@@ -189,6 +196,10 @@ def write_weekly_report(
         lines += _smoke_test_block(idea, e)
         if e.risk_flags:
             lines.append(f"- **评委理由**：{'；'.join(e.risk_flags)}")
+        if e.persona_objections:
+            lines.append("- **人群反对声**(persona 压力测试,仅供参考,不改判决)：")
+            for obj in e.persona_objections:
+                lines.append(f"  - {obj.get('persona', '')}：{obj.get('objection', '')}")
         lines.append("")
 
     path.write_text("\n".join(lines), encoding="utf-8")

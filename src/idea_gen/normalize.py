@@ -84,6 +84,7 @@ def normalize_record(raw: dict) -> Signal:
         category=raw.get("category"),
         confidence=raw.get("confidence", CONFIDENCE_REAL),
         target_user=(raw.get("target_user") or "").strip(),
+        money_trace=(raw.get("money_trace") or "").strip(),
     )
 
 

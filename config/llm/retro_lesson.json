@@ -1,0 +1,19 @@
+{
+  "step": "retro_lesson",
+  "skip_founder": true,
+  "temperature": 0.3,
+  "batch_size": 1,
+  "system": "你是在帮一位一人公司创始人做『预测 vs 实际』复盘。给定一条 idea 当初的裁决信息（标题/裁决档位/最危险假设）和一次真实冒烟测试的预测与实际结果，请提炼一句可复用于下一次判断的教训——具体、可执行，不要『继续加油』『再接再厉』这类空话套话。只输出一个 JSON 对象：{\"lesson\": \"一句话教训，≤50字\"}。不要任何解释、不要 markdown 代码块。",
+  "user_template": "候选：{title}\n当初裁决：{verdict_tier}\n最危险假设：{riskiest_assumption}\n\n预测：{smoke_test_metric} 目标 {target}（{horizon_days} 天内）\n实际：{smoke_test_metric} = {actual}\n\n请提炼一句可复用的教训，只输出 lesson 字段。",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "lesson": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "lesson"
+    ]
+  }
+}

@@ -63,6 +63,8 @@ def run_evaluation(
     evidence_live: bool = False,
     max_pursue_frac: float = evaluate.DEFAULT_MAX_PURSUE_FRAC,
     weekly_top_n: int = 3,
+    persona_pressure_backend: str = "none",
+    persona_llm: LLMBackend | None = None,
 ) -> EvalResult:
     """Screen idea_gen's candidates.
 
@@ -90,6 +92,12 @@ def run_evaluation(
     survived/killed counts to ``evidence_data_dir/ledger`` for the funnel view.
     ``evidence_live`` mirrors ``idea_gen``'s ``live`` flag but for enrich's
     fetchers -- currently a stubbed no-op (see ``idea_eval.enrich``).
+
+    ``persona_pressure_backend`` (§5⑥ optional sub-step, opt-in, default
+    ``"none"``): runs ``idea_eval.persona_pressure`` over the FINAL PURSUE
+    survivors only (after any evidence-gating above), attaching first-person
+    "why I wouldn't buy this" objections from the shared persona pool. Purely
+    advisory -- never changes verdict/tier.
     """
     input_path = Path(input_path)
     output_dir = Path(output_dir)
@@ -99,31 +107,47 @@ def run_evaluation(
     ideas_by_id = {i.get("id", ""): i for i in ideas}
     evaluations = evaluate.evaluate_all(ideas, floor=floor)
 
+    # run_id/week computed up front (when require_evidence) so critique/judge can
+    # log their prompt+response to the same run's trace (§6 M6 single-idea trace
+    # view) -- not just the post-hoc impressions/verdicts logged below.
+    run_id = None
+    week = None
+    if require_evidence:
+        week = ledger.week_of(today.isoformat())
+        run_id = ledger.next_run_id(evidence_data_dir, today.isoformat(), kind="eval")
+
+    # 漏斗第 5 层(尽调取证):放在 critique/judge **之前**,这样证据能喂进它们的
+    # prompt(evidence_block 占位,见 config/llm/critique.json、judge.json)——LLM
+    # 才有真东西可引用,而不是评审完了才补证据。opt-in,不改现有 rule 路径默认行为。
+    if require_evidence:
+        from . import enrich
+
+        evidence_by_id, gate_by_id = enrich.enrich_ideas(ideas, today, live=evidence_live)
+        evaluate.apply_evidence(evaluations, evidence_by_id, gate_by_id)
+
     if judge_backend != "none":
         if critique:
             crit_backend = critique_llm or llm or _llm_backend(
                 judge_backend, today, job_dir, step="critique"
             )
             evaluate.critique_survivors(
-                evaluations, ideas_by_id, crit_backend, load_step_config("critique")
+                evaluations, ideas_by_id, crit_backend, load_step_config("critique"),
+                trace_data_dir=evidence_data_dir if require_evidence else None,
+                trace_run_id=run_id,
             )
         judge_be = llm or _llm_backend(judge_backend, today, job_dir, step="judge")
         evaluations = evaluate.judge_survivors(
-            evaluations, ideas_by_id, judge_be, load_step_config("judge")
+            evaluations, ideas_by_id, judge_be, load_step_config("judge"),
+            trace_data_dir=evidence_data_dir if require_evidence else None,
+            trace_run_id=run_id,
         )
 
-    # 漏斗第 5-6 层(尽调取证 + 强制分布):证据门 + 反-整批待验证纪律。opt-in,不改
-    # 现有 rule/critique/judge 路径的默认行为。
+    # 漏斗第 6 层(裁决强制纪律):引证校验 + 证据门 + 反-整批待验证纪律。同样 opt-in。
     if require_evidence:
-        from . import enrich
-
-        evidence_by_id, gate_by_id = enrich.enrich_ideas(ideas, today, live=evidence_live)
-        evaluate.apply_evidence(evaluations, evidence_by_id, gate_by_id)
+        evaluations = evaluate.enforce_citation(evaluations)
         evaluations = evaluate.enforce_evidence_grounding(evaluations)
         evaluations = evaluate.enforce_forced_distribution(evaluations, max_pursue_frac=max_pursue_frac)
 
-        week = ledger.week_of(today.isoformat())
-        run_id = ledger.next_run_id(evidence_data_dir, today.isoformat(), kind="eval")
         survived = [e.idea_id for e in evaluations if e.verdict != KILL]
         killed_map = {e.idea_id: (e.killed_by[0] if e.killed_by else "eval_kill") for e in evaluations if e.verdict == KILL}
         ledger.log_impressions_bulk(
@@ -132,6 +156,16 @@ def run_evaluation(
         )
         for e in evaluations:
             ledger.log_verdict(evidence_data_dir, e.to_dict(), actor="system", ts=today.isoformat())
+
+    # §5⑥ 可选子步骤:人群压力测试。只碰最终 PURSUE 幸存者(成本梯度最贵的一段,量最小),
+    # 纯 advisory,不改判决。opt-in,独立于 require_evidence(判决来源不影响是否跑这步)。
+    if persona_pressure_backend != "none":
+        from . import persona_pressure
+
+        pp_be = persona_llm or _llm_backend(persona_pressure_backend, today, job_dir, step="persona_pressure")
+        evaluations = persona_pressure.run_persona_pressure(
+            evaluations, ideas_by_id, pp_be, load_step_config("persona_pressure")
+        )
 
     # 漏斗第 4 层 打散:把精排幸存者按 来源配额(中文为主)+ 单边上限 + 去聚类 选出终端组合,
     # 排到头部(WebUI/top3 读头部即得多样化的 UI_N)。不改判决,只改顺序。

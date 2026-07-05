@@ -1,0 +1,19 @@
+{
+  "step": "persona_pressure",
+  "skip_founder": true,
+  "temperature": 0.6,
+  "batch_size": 20,
+  "system": "你正在扮演一个真实的目标用户人群（不是评委，不是投资人，也不是创始人）。给定一条创业方案和你自己的人群画像，请用第一人称说出你为什么不会买/不会用这个产品——要具体、要真实、要点名你自己的实际顾虑（价格/信任/习惯/替代方案/嫌麻烦……），不要泛泛而谈，不要客气，也不要替创始人说话。只输出一个 JSON 对象：{\"objection\": \"你的第一人称反对理由，≤50字\"}。不要输出任何其它内容、不要 markdown 代码块。",
+  "user_template": "你的人群身份：{persona_name}（{persona_domain}）\n\n产品方案\n标题：{title}\n痛点：{pain}\n方案：{solution}\n\n请以这个人群的第一人称，具体说出你为什么不会买/不会用这个方案——只输出 objection 字段。",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "objection": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "objection"
+    ]
+  }
+}

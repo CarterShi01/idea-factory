@@ -1,11 +1,12 @@
 import type { Version } from "../types";
 
-export type Tab = "overview" | "ideas" | "decisions" | "signals" | "run" | "profile";
+export type Tab = "overview" | "ideas" | "decisions" | "signals" | "run" | "profile" | "funnel";
 
 const ITEMS: { key: Tab; label: string; ico: string }[] = [
   { key: "overview", label: "概览", ico: "◉" },
   { key: "ideas", label: "创意", ico: "✦" },
   { key: "decisions", label: "评估决策", ico: "⊘" },
+  { key: "funnel", label: "漏斗", ico: "▼" },
   { key: "signals", label: "信号", ico: "≈" },
   { key: "run", label: "运行管线", ico: "▷" },
   { key: "profile", label: "画像", ico: "☰" },

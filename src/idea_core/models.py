@@ -53,6 +53,7 @@ class Signal:
     trend_status: str = "steady"  # rising / steady / peaked（动态模式由 trends 回填）
     growth_speed: float = 0.0     # 0-1，话题上升速度（动态模式）
     target_user: str = ""         # 源③人群标签等自带的目标用户（normalize 透传；生成阶段优先用它，避免 dev 默认值覆盖）
+    money_trace: str = ""         # pipeline-v2 §5①:谁在为此付费/雇人/成交的痕迹描述（招聘/成交/评论类源自带，其余源留空）
 
     def to_dict(self) -> dict:
         return asdict(self)

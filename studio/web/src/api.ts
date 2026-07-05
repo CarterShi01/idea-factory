@@ -1,4 +1,15 @@
-import type { Decision, FounderProfile, Idea, Overview, Signal, Version } from "./types";
+import type {
+  Decision,
+  FounderProfile,
+  FunnelReport,
+  Idea,
+  Overview,
+  Signal,
+  TraceEntry,
+  Version,
+  WhatifBackend,
+  WhatifJudgeResult,
+} from "./types";
 
 const vq = (version?: string) => (version ? `?version=${encodeURIComponent(version)}` : "");
 
@@ -42,4 +53,21 @@ export const api = {
   founderProfile: () => req<FounderProfile>("/api/founder-profile"),
   saveFounderProfile: (body: FounderProfile) =>
     req<{ ok: boolean }>("/api/founder-profile", { method: "PUT", body: JSON.stringify(body) }),
+
+  // pipeline-v2 §6 M6: ledger (funnel / trace / founder-labels) + scoped what-if.
+  funnel: () => req<FunnelReport>("/api/ledger/funnel"),
+  ledgerVerdicts: () => req<Record<string, unknown>[]>("/api/ledger/verdicts"),
+  ledgerOutcomes: () => req<Record<string, unknown>[]>("/api/ledger/outcomes"),
+  trace: (runId: string, stage: string) =>
+    req<TraceEntry[]>(`/api/ledger/trace?run_id=${encodeURIComponent(runId)}&stage=${encodeURIComponent(stage)}`),
+  label: (candidateId: string, action: string, extra?: Record<string, unknown>) =>
+    req<{ ok: boolean }>("/api/ledger/label", {
+      method: "POST",
+      body: JSON.stringify({ candidate_id: candidateId, action, ...extra }),
+    }),
+  whatifJudge: (ideaId: string, overrides: Record<string, unknown>, backend: WhatifBackend = "mock") =>
+    req<WhatifJudgeResult>("/api/run/whatif-judge", {
+      method: "POST",
+      body: JSON.stringify({ idea_id: ideaId, overrides, backend }),
+    }),
 };
