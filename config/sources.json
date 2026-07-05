@@ -3,6 +3,19 @@
   "brain": { "enabled": true },
   "persona": { "enabled": true },
 
+  "jobs": {
+    "enabled": true,
+    "_note": "招聘信号(钱在流动的地方之一)。离线读 data/raw/fixtures/jobs.jsonl;live 真实招聘网站抓取需创始人批准后再接(见 idea_gen/sources/jobs.py)。"
+  },
+  "marketplace": {
+    "enabled": true,
+    "_note": "服务成交信号。离线读 data/raw/fixtures/marketplace.jsonl;live 真实市场页抓取需创始人批准后再接。"
+  },
+  "reviews": {
+    "enabled": true,
+    "_note": "竞品差评信号。离线读 data/raw/fixtures/reviews.jsonl;live 真实评论页抓取需创始人批准后再接。"
+  },
+
   "hn_algolia": {
     "enabled": true,
     "_note": "enabled 仅表示'live 时启用';默认 live=False 不触网,离线 demo 不受影响",

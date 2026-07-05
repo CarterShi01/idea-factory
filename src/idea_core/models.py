@@ -129,3 +129,83 @@ class ScoredCandidate:
         d["alpha"] = self.alpha
         d["decay"] = self.decay
         return d
+
+
+# --- pipeline-v2 additions (docs/design/pipeline-v2-plan.md §4) ------------
+#
+# Evidence / Outcome are new, additive record types for the enrich and retro
+# stages. They deliberately do NOT touch Signal / IdeaCandidate / ScoredCandidate
+# above -- those remain the contract idea_gen <-> idea_eval already share, and
+# every existing consumer (Studio, tests, dify flows) keeps working unchanged.
+
+# Evidence kinds (idea_eval.enrich's evidence gate checks for these).
+EVIDENCE_PAYING_PROOF = "paying_proof"
+EVIDENCE_COMPETITOR_PRICING = "competitor_pricing"
+EVIDENCE_REACH_PATH = "reach_path"
+EVIDENCE_HIRING = "hiring"
+EVIDENCE_DEAL = "deal"
+
+
+@dataclass
+class Evidence:
+    """One structured, sourced piece of real-world evidence for a candidate.
+
+    Produced by :mod:`idea_eval.enrich` (fixture-backed by default; a live
+    fetcher is an explicit, founder-approved follow-up per CLAUDE.md's "no real
+    external API calls without approval" rule). ``valid`` is False when
+    ``source_date`` is more than 24 months old (cheat-on-money's staleness
+    rule) -- stale evidence doesn't count toward the evidence gate.
+    """
+
+    id: str
+    candidate_id: str
+    kind: str                      # one of EVIDENCE_* above
+    source_url: str
+    source_date: str = ""          # ISO date the evidence itself is from
+    fetched_at: str = ""
+    summary: str = ""
+    numbers: dict = field(default_factory=dict)   # e.g. {"price": 29, "currency": "USD"}
+    valid: bool = True
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "Evidence":
+        known = {
+            k: d[k] for k in (
+                "id", "candidate_id", "kind", "source_url", "source_date",
+                "fetched_at", "summary", "numbers", "valid",
+            ) if k in d
+        }
+        return cls(**known)
+
+
+@dataclass
+class Outcome:
+    """A founder-recorded real-world smoke-test result (retro's ground truth).
+
+    Mirrors :class:`idea_core.ledger.Outcome` (kept here too so idea_eval code
+    can type against ``idea_core.models.Outcome`` without importing ``ledger``
+    just for the type -- both serialize to the identical dict shape).
+    """
+
+    candidate_id: str
+    tested_at: str
+    prediction: dict = field(default_factory=dict)
+    actual: dict = field(default_factory=dict)
+    first_revenue: float | None = None
+    lesson: str = ""
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "Outcome":
+        known = {
+            k: d[k] for k in (
+                "candidate_id", "tested_at", "prediction", "actual",
+                "first_revenue", "lesson",
+            ) if k in d
+        }
+        return cls(**known)

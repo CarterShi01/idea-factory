@@ -98,6 +98,19 @@ other. Cross-half communication is the `ideas.json` file only.
 
 ## Core design principles (keep these intact)
 
+- **FIRST PRINCIPLE — LLM cost gradient down the funnel（成本梯度第一原则）**:
+  every stage's *semantic judgment* comes from LLM-produced structured fields;
+  every stage's *logic* (thresholds, ranking, gates, budgets) is deterministic
+  code over those fields. Per-idea LLM cost must increase monotonically down
+  the funnel — early stages spend little per idea (batch, small models, single
+  extraction) on many ideas; late stages spend a lot per idea (retrieval-backed
+  evidence, top models, multi-turn adversarial judging) on few survivors. Cheap
+  money filters early so expensive money is only ever spent on the previous
+  stage's survivors. Corollary: per-stage total spend (per-idea cost × volume)
+  should stay roughly flat; a stage whose total blows up means the *previous*
+  stage isn't killing enough — fix the funnel ratio, don't downgrade the model.
+  A stage with zero new LLM calls (rank, portfolio) is not a violation: it runs
+  on fields already paid for upstream.
 - **Factors are pure functions, single source of truth** (`factors.py`), so the
   scoring shared with `idea-evl` never drifts (the freqtrade lesson).
 - **Generation over-produces; quality gating is idea-evl's job**, not the

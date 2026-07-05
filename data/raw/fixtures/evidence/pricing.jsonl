@@ -1,0 +1,5 @@
+{"keywords": ["stripe", "对账"], "source_url": "https://reconcile-demo.example.com/pricing", "source_date": "2026-05-10", "summary": "同类 Stripe 对账工具,3 档方案,含免费试用", "numbers": {"price": 29, "currency": "USD", "plan": "starter/mo"}}
+{"keywords": ["客服", "工单"], "source_url": "https://helpdesk-ai-demo.example.com/pricing", "source_date": "2026-04-02", "summary": "同类工单自动回复 SaaS,按坐席收费", "numbers": {"price": 49, "currency": "USD", "plan": "per-seat/mo"}}
+{"keywords": ["等保", "合规", "安全运维"], "source_url": "https://secops-compliance-demo.example.com/pricing", "source_date": "2026-03-15", "summary": "同类等保合规证据自动整理工具,企业版报价", "numbers": {"price": 199, "currency": "USD", "plan": "enterprise/mo"}}
+{"keywords": ["英语", "口语", "陪练"], "source_url": "https://speaking-partner-demo.example.com/pricing", "source_date": "2026-06-01", "summary": "同类英语口语陪练平台,按次计费", "numbers": {"price": 15, "currency": "USD", "plan": "per-session"}}
+{"keywords": ["竞品更新日志", "变更"], "source_url": "https://changelog-watch-demo.example.com/pricing", "source_date": "2026-02-20", "summary": "同类竞品变更监控工具,团队版报价", "numbers": {"price": 39, "currency": "USD", "plan": "team/mo"}}

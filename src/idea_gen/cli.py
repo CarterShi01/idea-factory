@@ -41,6 +41,16 @@ def build_parser() -> argparse.ArgumentParser:
         default="rule",
         help="generation backend: rule (offline, default) / router (Tencent) / cc (manual handoff) / mock / dify (Dify workflow, prompt-flow in dify/flows/)",
     )
+    parser.add_argument(
+        "--use-triage",
+        action="store_true",
+        default=False,
+        help=(
+            "opt-in hard red-line triage (docs/design/pipeline-v2-plan.md §5②): kill signals "
+            "older than 24 months + candidates with explicit founder-profile anti-fit, and log "
+            "survived/killed to <data-dir>/ledger/ for the funnel view"
+        ),
+    )
     return parser
 
 
@@ -57,6 +67,7 @@ def main(argv: list[str] | None = None) -> int:
             top_n=args.top_n,
             sources=args.sources,
             gen_backend=args.gen_backend,
+            use_triage=args.use_triage,
         )
     except PendingHandoff as ph:
         return report_handoff(ph)

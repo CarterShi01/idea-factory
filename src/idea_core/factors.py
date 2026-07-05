@@ -503,6 +503,33 @@ _ANTI_FIT = {
 }
 
 
+def has_hard_anti_fit(c: IdeaCandidate) -> bool:
+    """True when the candidate is an explicit, un-offset anti-fit for this founder.
+
+    Used by ``idea_gen.triage`` as a **hard gate** (kill outright, no float
+    score) -- deliberately narrower than "founder_fit happens to be low": a bare
+    idea that simply doesn't mention any channel is NOT an anti-fit (it's just
+    unvalidated), but explicit anti-fit language (烧钱买量/融资续命/自研硬件/…)
+    with no monopoly channel or lang/region moat to offset it is a genuine
+    profile mismatch the founder himself flagged (config/founder.json's
+    ``anti_fit`` list, folded into ``_ANTI_FIT``/``_COMPLEXITY_HEAVY`` here).
+
+    Kept as a boolean predicate (not a threshold on the continuous
+    ``founder_fit`` score) so triage's gate doesn't silently drift if
+    ``distribution_fit``'s no-signal floor ever changes -- the two concerns
+    (score-for-ranking vs. gate-for-triage) are decoupled on purpose.
+    """
+    text = c.text()
+    anti_hits = _count_hits(text, _ANTI_FIT) + _count_hits(text, _COMPLEXITY_HEAVY)
+    if anti_hits == 0:
+        return False
+    lr_hits = _count_hits(text, _MOAT_LANG_REGION)
+    if lr_hits > 0:
+        return False  # the founder's strongest moat offsets an anti-fit mention
+    dist = distribution_fit(c)
+    return dist < 0.3  # below the referral band = no channel to offset the anti-fit
+
+
 def founder_fit(c: IdeaCandidate) -> float:
     """这位创始人做**这条 idea** 的适配度(个人画像一等排序信号)。Higher = 更适合他。
 

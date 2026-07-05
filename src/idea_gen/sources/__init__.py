@@ -97,4 +97,5 @@ def ensure_loaded() -> None:
     if _LOADED:
         return
     from . import static_external, brain, persona, hn_algolia, vps_browser  # noqa: F401
+    from . import jobs, marketplace, reviews  # noqa: F401 -- pipeline-v2 "money trace" channels
     _LOADED = True

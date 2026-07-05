@@ -97,3 +97,98 @@ def write_memos(
         lines.append("")
 
     path.write_text("\n".join(lines), encoding="utf-8")
+
+
+# --- pipeline-v2: weekly report (docs/design/pipeline-v2-plan.md §8) --------
+#
+# Additive: does NOT replace write_memos/decision_memos.md above (still the
+# default daily output). This is the north-star artifact -- top few survivors
+# only, each armed with its clickable evidence chain and a smoke-test package,
+# meant to be read at most weekly. Only meaningful once a run went through
+# idea_eval.enrich (require_evidence=True) -- without evidence, every idea
+# lands in the "待补证据" tier, which is itself the correct, honest signal.
+
+_TIER_ZH = {PURSUE: "本周就测", REVIEW: "待验证复核", KILL: "淘汰"}
+_EVIDENCE_KIND_ZH = {
+    "paying_proof": "付费证据", "competitor_pricing": "竞品定价",
+    "reach_path": "触达路径", "hiring": "招聘证据", "deal": "成交证据",
+}
+
+
+def _tier_of(e: Evaluation) -> str:
+    if e.verdict == REVIEW and e.evidence_missing:
+        return "待补证据"
+    return _TIER_ZH.get(e.verdict, e.verdict)
+
+
+def _evidence_lines(evidence: list[dict]) -> list[str]:
+    if not evidence:
+        return ["  (暂无证据 —— 需先跑 idea-eval --require-evidence)"]
+    lines = []
+    for ev in evidence:
+        kind = _EVIDENCE_KIND_ZH.get(ev.get("kind", ""), ev.get("kind", ""))
+        stale = "" if ev.get("valid", True) else " ⚠️ 已过 24 月,视为失效"
+        url = ev.get("source_url", "")
+        summary = ev.get("summary", "")
+        date_ = ev.get("source_date", "")
+        lines.append(f"  - [{kind}]({url}) {summary}（{date_}）{stale}")
+    return lines
+
+
+def _smoke_test_block(idea: dict, e: Evaluation) -> list[str]:
+    """A rule-composed draft smoke-test package -- a scaffold to fill in by hand,
+    not an LLM-authored plan (that's a documented follow-up, see plan §5⑤/⑦).
+    """
+    channel = (idea.get("first_10_customers") or "").strip() or "(未指定 —— 补 first_10_customers)"
+    price_hint = "; ".join(
+        f"{ev.get('numbers', {}).get('price')}{ev.get('numbers', {}).get('currency', '')}"
+        for ev in e.evidence
+        if ev.get("kind") == "competitor_pricing" and ev.get("numbers", {}).get("price") is not None
+    ) or "(参考同类定价证据自定)"
+    return [
+        "- **48h 测试包**（草稿,需人工补全）：",
+        f"  - 渠道：{channel}",
+        f"  - 参考定价：{price_hint}",
+        "  - 预测：待人工填写(如『7 天内 10 个邮箱』),测完用 `idea-eval retro` 回填实际数字",
+    ]
+
+
+def write_weekly_report(
+    evaluations: list[Evaluation],
+    ideas_by_id: dict[str, dict],
+    path: Path,
+    week: str,
+    top_n: int = 3,
+) -> None:
+    """Write the §8-format weekly report: top ``top_n`` survivors only, each
+    with its evidence chain + a smoke-test scaffold. Ranked pursue-first, then
+    review, by score -- mirrors ``_sort``'s ordering.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    survivors = [e for e in evaluations if e.verdict != KILL][:top_n]
+
+    lines: list[str] = [
+        f"# 创意工厂 — 本周候选（{week}）",
+        "",
+        f"本周共 {len(survivors)} 条(上限 {top_n})。每条都附钱的证据链——没有证据链的字段会明确标出,"
+        "不是编出来的。",
+        "",
+    ]
+    for rank, e in enumerate(survivors, start=1):
+        idea = ideas_by_id.get(e.idea_id, {})
+        lines += [
+            f"## 本周 #{rank}：{e.title}　　tier: {_tier_of(e)}",
+            "",
+            f"- **痛点**：{idea.get('pain', '')}（源：{idea.get('source', '')}，{idea.get('observed_on', '')}）",
+            f"- **方案**：{idea.get('solution', '')}",
+            "- **钱的证据链**：",
+        ]
+        lines += _evidence_lines(e.evidence)
+        lines.append(f"- **前 10 个客户在哪**：{idea.get('first_10_customers', '') or '(未填写)'}")
+        lines.append(f"- **最危险假设**：{e.riskiest_assumption}")
+        lines += _smoke_test_block(idea, e)
+        if e.risk_flags:
+            lines.append(f"- **评委理由**：{'；'.join(e.risk_flags)}")
+        lines.append("")
+
+    path.write_text("\n".join(lines), encoding="utf-8")

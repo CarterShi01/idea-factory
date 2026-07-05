@@ -24,6 +24,9 @@ data/llm_jobs/
 data/state/
 data/cache/
 
+# pipeline-v2 ledger (impressions/verdicts/outcomes + LLM traces; regenerated)
+data/ledger/
+
 # Local secrets (real provider keys live only in env / .env, never in git)
 .env
 

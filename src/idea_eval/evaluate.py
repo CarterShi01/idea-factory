@@ -22,6 +22,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 
 import json
+import math
 
 from idea_core.factors import FACTORS
 
@@ -116,6 +117,13 @@ class Evaluation:
     doomed_assumption: str = ""
     # B output: how the judge responded to the critique (anti-self-enhancement)
     judge_rebuttal: str = ""
+    # Pipeline-v2 evidence gate (idea_eval.enrich; opt-in via require_evidence) --
+    # additive, defaults keep every existing consumer/test unaffected.
+    evidence: list[dict] = field(default_factory=list)
+    evidence_ready: bool = False
+    evidence_missing: list[str] = field(default_factory=list)
+    evidence_demoted: bool = False   # True if an ungrounded pursue was demoted to review
+    forced_downgrade: bool = False   # True if demoted by the batch pursue-fraction cap
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -328,6 +336,81 @@ def diversify_select(
 
 def evaluate_all(ideas: list[dict], floor: float = DEFAULT_FLOOR) -> list[Evaluation]:
     return _sort([evaluate_idea(i, floor=floor) for i in ideas])
+
+
+# --- pipeline-v2: evidence-aware diligence (docs/design/pipeline-v2-plan.md §5⑤) ---
+#
+# These are opt-in (wired via idea_eval.pipeline's ``require_evidence`` flag,
+# default off) so the existing rule-only / critique+judge path is unchanged
+# unless a caller explicitly asks for evidence-gated diligence. They run as a
+# final pass over whatever verdict rule/critique/judge already produced: a
+# PURSUE that isn't backed by real evidence is not allowed to stand, and no
+# batch may be dominated by PURSUE (the "high-efficiency no" discipline).
+
+
+def apply_evidence(
+    evaluations: list[Evaluation],
+    evidence_by_id: dict[str, list],
+    gate_by_id: dict[str, tuple[bool, list[str]]],
+) -> list[Evaluation]:
+    """Attach each evaluation's fetched evidence + gate result (mutates in place).
+
+    ``evidence_by_id`` values may be :class:`idea_core.models.Evidence` objects
+    or plain dicts (both are accepted so callers can pass ``enrich.enrich_ideas``'s
+    output directly).
+    """
+    for e in evaluations:
+        evs = evidence_by_id.get(e.idea_id, [])
+        e.evidence = [ev.to_dict() if hasattr(ev, "to_dict") else ev for ev in evs]
+        ready, missing = gate_by_id.get(e.idea_id, (False, []))
+        e.evidence_ready = ready
+        e.evidence_missing = list(missing)
+    return evaluations
+
+
+def enforce_evidence_grounding(evaluations: list[Evaluation]) -> list[Evaluation]:
+    """Demote a PURSUE verdict to REVIEW when the evidence gate isn't satisfied.
+
+    Must run after :func:`apply_evidence` (a candidate the caller never ran
+    enrichment on has ``evidence_ready=False`` by default, so calling this
+    without ``apply_evidence`` first would demote every survivor -- that's a
+    caller error, not a supported mode).
+    """
+    for e in evaluations:
+        if e.verdict == PURSUE and not e.evidence_ready:
+            e.verdict = REVIEW
+            e.evidence_demoted = True
+            reason = "/".join(e.evidence_missing) or "证据不足"
+            e.risk_flags.append(f"无真实证据支撑({reason})——先补证据,再判定可测,不能直接 pursue。")
+    return _sort(evaluations)
+
+
+DEFAULT_MAX_PURSUE_FRAC = 0.5
+
+
+def enforce_forced_distribution(
+    evaluations: list[Evaluation],
+    max_pursue_frac: float = DEFAULT_MAX_PURSUE_FRAC,
+) -> list[Evaluation]:
+    """Cap the PURSUE fraction of a batch (plan §5⑤: kill+review >= 50%).
+
+    Excess PURSUE (beyond the cap, weakest-scoring first) is demoted to REVIEW
+    with ``forced_downgrade=True`` -- mirrors the existing ``confidence_demoted``
+    pattern in :func:`judge_survivors`. KILL verdicts are never touched.
+    """
+    total = len(evaluations)
+    if total == 0:
+        return evaluations
+    cap = math.floor(total * max_pursue_frac)
+    pursue = [e for e in evaluations if e.verdict == PURSUE]
+    if len(pursue) <= cap:
+        return evaluations
+    pursue_sorted = sorted(pursue, key=lambda e: (-e.eval_score, e.idea_id))
+    for e in pursue_sorted[cap:]:
+        e.verdict = REVIEW
+        e.forced_downgrade = True
+        e.risk_flags.append("批次内 pursue 占比超限——强制降级复核(高效说不纪律,不许整批都待验证)。")
+    return _sort(evaluations)
 
 
 # --- B-prep: devil's advocate critique -----------------------------------

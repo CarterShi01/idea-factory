@@ -13,11 +13,12 @@ from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 
+from idea_core import ledger
 from idea_core.llm import LLMBackend, get_backend, load_step_config
 from idea_core.state import SeenStore, SignalHistory
 from idea_core.trends import classify
 
-from . import collect, dedup, export, generate, normalize, ranks
+from . import collect, dedup, export, generate, normalize, ranks, triage
 
 
 def _dynamic_dedup_and_trends(signals, state_dir: Path, today: date):
@@ -78,6 +79,7 @@ def run_pipeline(
     live: bool = False,
     use_state: bool = False,
     persona_backend: str = "static",
+    use_triage: bool = False,
 ) -> PipelineResult:
     """Run the generation pipeline.
 
@@ -86,6 +88,10 @@ def run_pipeline(
     ``live``: 允许联网型适配器抓取（默认离线）。
     ``use_state``: 启用持久状态（SeenStore 跨日去重 + SignalHistory 趋势）—— 这是"动态"
     模式;默认 False 保持 demo 幂等(同输入两次结果相同)。
+    ``use_triage``: 启用漏斗②硬红线(见 idea_gen.triage/docs/design/pipeline-v2-plan.md)——
+    信号侧>24 月过期硬杀 + 候选侧显式 anti-fit 硬杀,并把杀/存活写入 data/ledger/(供
+    idea-eval stats 的漏斗视图读)。默认 False:不改变现有离线 demo 的产出契约,是新增的
+    opt-in 能力,不是替换。
     """
     data_dir = Path(data_dir)
     output_dir = Path(output_dir)
@@ -100,12 +106,31 @@ def run_pipeline(
     else:
         kept, _dropped = dedup.dedupe_signals(signals, seen_keys=seen_keys)
 
+    run_id = ledger.next_run_id(data_dir, today.isoformat(), kind="gen") if use_triage else None
+    week = ledger.week_of(today.isoformat())
+
+    # 3b. triage (硬红线):信号侧 >24 月过期直接杀,不参与后面任何阶段。
+    if use_triage:
+        kept, stale_killed = triage.triage_signals(kept, today)
+        ledger.log_impressions_bulk(
+            data_dir, run_id, week, "triage_signal",
+            survived_ids=[s.id for s in kept], killed=stale_killed, ts=today.isoformat(),
+        )
+
     # 4. generate (over-generate) -> 5. score -> rank
     if gen_backend == "rule":
         candidates = generate.generate(kept)
     else:
         backend = llm or _llm_backend(gen_backend, "generate", today, job_dir)
         candidates = generate.generate_llm(kept, backend, load_step_config("generate"))
+
+    # 4b. triage (硬红线):候选侧显式 anti-fit(创始人画像明确不适合的方向)直接杀。
+    if use_triage:
+        candidates, anti_fit_killed = triage.triage_candidates(candidates)
+        ledger.log_impressions_bulk(
+            data_dir, run_id, week, "triage_candidate",
+            survived_ids=[c.id for c in candidates], killed=anti_fit_killed, ts=today.isoformat(),
+        )
 
     # 动态模式:从候选的 target_user 自动派生新人群,持久化供下轮"全选"纳入
     if use_state:
