@@ -1,141 +1,107 @@
 # Idea Factory
 
-A two-half system that turns **three sources of signal** — external events, the
-founder's own ideas, and simulated target-user pain — into a **screened daily
-list of startup ideas**, each with a verdict and a cheap test to run next.
+An eight-stage funnel that turns **money-flow signals** — hiring posts, market
+transactions, competitor reviews, HN, the founder's inbox, simulated user pain —
+into **one evidence-backed, 48h-testable opportunity per week**. The end metric
+is time-to-first-revenue.
 
-The design, the open-source landscape it borrows from, and the staged roadmap
-are in [`docs/research/`](docs/research/) — start with
-[`00-executive-summary-and-roadmap.md`](docs/research/00-executive-summary-and-roadmap.md).
+The blueprint lives in [`docs/design/pipeline-v2-plan.md`](docs/design/pipeline-v2-plan.md);
+background research in [`docs/research/`](docs/research/).
 
-> **Current stage: roadmap stage 0 — offline MVP.** Pure Python, standard library
-> only, no network calls. Reads local sample files under `data/raw/` and writes
-> to `data/processed/`.
+> **Offline by default.** Pure Python, standard library only, no network calls
+> on the default path. Reads `data/raw/`, writes stage artifacts to
+> `data/processed/`, logs everything to `data/ledger/`.
 
-## Three isolated packages (`src/`)
+## One package, eight stages (`src/idea_factory/`)
 
 ```
-        ┌─────────────┐
-        │  idea_core  │  shared contract: data model + factor library
-        └─────────────┘  (single source of truth — no factor drift)
-           ▲         ▲
-           │         │            idea_gen and idea_eval depend on idea_core,
-   ┌───────┘         └───────┐    but never on each other.
-┌──────────┐           ┌───────────┐
-│ idea_gen │ ──ideas──▶│ idea_eval │
-└──────────┘  .json    └───────────┘
- generation              evaluation
- + scoring               + kill-gate
+contract ← runtime ← factors ← stages ← pipeline ← cli      (分层铁律,CI 强制)
+
+①recall → ②triage → ③generate → ④rank ──ideas.json──▶ ⑤enrich → ⑥diligence → ⑦portfolio
+ 捞信号     硬杀      候选成型     纯代码粗排   便宜/昂贵缝   取证+证据门   开庭裁决      组合+周报
+                                                     (⑧retro 回流:idea retro / stats / calibrate)
 ```
 
-| Package | Role | Pipeline |
-|---------|------|----------|
-| `idea_core` | Shared `models` + `factors` (the contract) | — |
-| `idea_gen`  | Generate & score candidates ("alpha" side)  | collect → normalize → dedup → generate → score → rank → export |
-| `idea_eval` | Screen candidates, say no efficiently        | read `ideas.json` → kill-gate + rubric → `screened.json` + `decision_memos.md` |
+Every stage boundary is a **disk artifact** with a uniform envelope
+(`schema_version` checked on load): `recall.json → triage.json →
+candidates.json → ideas.json → evidence.json → verdicts.json → screened.json`
+plus human reports (`ideas.md`, `decision_memos.md`, `weekly_report.md`).
+That makes any stage independently rerunnable and the whole run resumable.
 
-The two halves talk **only through files on disk** (`ideas.json`), so they stay
-cleanly isolated. The factor *definitions* live once, in `idea_core`, and are
-shared by both — the freqtrade lesson from the research (no drift between the
-generation and evaluation sides).
+Stages never import each other (a CI test enforces it); only `pipeline.py`
+composes them. The factor library (`factors/`) is a set of pure
+`candidate → float` functions shared by every stage — no scoring drift.
 
 ## Install & run
 
 ```bash
 pip install -e .
 
-# 1. Generate + score candidates  ->  data/processed/ideas.json + ideas.md
-idea-gen
+idea run                      # the whole funnel, offline, zero tokens
+idea run --date 2026-07-07 --top-n 15 --sources brain_inbox
+idea run --from enrich        # resume from the expensive half (reads ideas.json)
+idea run --only diligence     # re-run exactly one stage from its artifacts
+python -m idea_factory run    # module form
 
-# 2. Screen them into decision memos  ->  data/processed/screened.json + decision_memos.md
-idea-eval
-
-# End to end, one line:
-idea-gen && idea-eval
+idea stats                    # funnel survival / kill reasons / prediction error
+idea retro --candidate <id> --metric signups --actual 7   # record a real test result
+idea calibrate                # factor↔outcome correlation (read-only, needs ≥10 samples)
 ```
 
-Useful flags:
+## LLM steps (all off by default — the offline path costs zero tokens)
+
+Per the cost-gradient first principle, each LLM step is gated by a backend flag;
+`none`/`rule` means that step runs deterministic code only:
 
 ```bash
-idea-gen  --date 2026-06-13 --top-n 15 --sources external_event brain_inbox
-idea-eval --date 2026-06-13 --top-n 20 --floor 0.25
-python -m idea_gen      # module form
-python -m idea_eval
+idea run --generate-backend router        # ③ LLM candidate generation (Tencent router)
+idea run --judge-backend router           # ⑥ critique + judge over gate survivors
+idea run --persona-pressure-backend mock  # ⑥ advisory persona objections
+idea run --persona-backend router         # ① grounded persona-pain synthesis
 ```
 
-## LLM steps (A: generate · B: judge)
-
-Two steps can use an LLM, both off by default (the offline rule-based path needs
-no network and no tokens). Switch them on per backend:
-
-```bash
-# A: LLM generation backend (idea-gen)
-idea-gen  --gen-backend router      # Tencent LKEAP (automatable; NOT Claude Code)
-
-# B: LLM-as-judge over the kill-gate survivors only (idea-eval, token-thrifty)
-idea-eval --judge-backend router
-```
-
-Backends: `rule`/`none` (offline default) · `router` (Tencent) · `mock` (tests) ·
-`cc` (manual Claude Code handoff). Prompts + JSON schemas live in
-`config/llm/{generate,judge}.json`. Configure the endpoint via env
-`IDEA_LLM_BASE_URL` / `IDEA_LLM_API_KEY` / `IDEA_LLM_MODEL` — these fall back to
-the standard `OPENAI_BASE_URL` / `OPENAI_API_KEY` / `OPENAI_MODEL`, so an ambient
-OpenAI-compatible endpoint works out of the box. (`base_url` must include the
-version path, e.g. `.../v1`.)
+Backends: `rule`/`none` (offline default) · `router` (Tencent; the automatable
+one) · `mock` (tests) · `dify` (Dify workflow; prompts live in `dify/flows/`,
+`config/llm/*.json` is the mirror — keep both in sync, CI checks it) · `cc`
+(manual Claude Code handoff).
 
 ### CC handoff mode (`--*-backend cc`) — no programmatic Claude Code
 
-Per the hard constraint (only manual CC sessions count toward the Max pool), the
-`cc` backend **never invokes Claude Code**. It writes a self-contained request
-pack and stops:
+The `cc` backend **never invokes Claude Code**. It writes a self-contained
+request pack and stops:
 
 ```bash
-idea-eval --judge-backend cc
+idea run --judge-backend cc
 #  ⏸ writes data/llm_jobs/judge-<date>.request.jsonl and pauses
 #  → in a Claude Code session, run:  /run-llm-batch
-#    (the run-llm-batch skill reads the pack, judges the whole batch in this
-#     session, writes data/llm_jobs/judge-<date>.response.jsonl)
-idea-eval --judge-backend cc        # re-run: resumes from the response pack
+idea run --judge-backend cc   # re-run: resumes from the response pack
 ```
-
-One file = the whole batch = one manual touchpoint. The
-[`/run-llm-batch`](.claude/skills/run-llm-batch/SKILL.md) skill automates the
-fill step inside CC. See
-[`docs/design/llm-abstraction.md`](docs/design/llm-abstraction.md).
-
-## The three sources (`data/raw/`)
-
-| Source | File | Confidence |
-|--------|------|------------|
-| External events | `sample_signals.json` | real |
-| Founder's inbox | `inbox.jsonl` (one idea per line) | real |
-| Simulated pain  | `personas.json` | **synthetic** (flagged, screened with extra suspicion) |
-
-Live external sources (Hacker News / arXiv / GitHub Trending RSS, …) are roadmap
-stage 1 and will sit behind an explicit, opt-in collect step — **never** on this
-default offline path.
 
 ## How an idea is judged
 
-`idea_core/factors.py` defines six pure factor functions (`candidate → float`):
-`market_freshness`, `pain_intensity`, `build_cost`, `moat_signal`,
-`competition_density`, `distribution_fit`.
-
-- **idea_gen** weights them into an `alpha` (with time decay + diversity ranking).
-- **idea_eval** applies a **multiplicative-floor kill gate**: a fatal flaw on a
-  critical dimension (no real pain, or not solo-buildable) kills the idea
-  outright, then scores the survivors and attaches the riskiest assumption + a
-  ≤2-week / ≤\$100 test.
+- **②triage** (always on): exact/near-dup dedup + >24-month staleness are hard
+  red-lines — no partial credit.
+- **④rank**: factor-weighted alpha with time decay and a commodity
+  hard-penalty; per-source weight buckets (`config/funnel.json`).
+- **⑤enrich** (always on, fixture-backed offline): every rank survivor gets a
+  money-evidence chain (competitor pricing / hiring / deals); the **evidence
+  gate** requires paying-proof + pricing + reach-path.
+- **⑥diligence**: rule kill-gate first (fatal flaw on a critical dimension
+  kills outright), then optional devil's-advocate critique + LLM judge, then
+  code-enforced discipline: hallucinated citations stripped, un-cited kills
+  demoted, ungrounded pursues demoted, batch pursue-fraction capped.
+- **⑦portfolio**: quota-driven diversify (中文为主, per-edge caps) + the weekly
+  report where every claim links to its evidence.
+- **⑧retro**: real test results flow back; `stats`/`calibrate` read the ledger.
 
 ## Tests
 
 ```bash
 pip install -e ".[dev]"
-pytest
+pytest        # includes test_stage_isolation.py — the layering law is CI-enforced
 ```
 
 ## Non-goals (this stage)
 
-No web UI, no database service, no heavy multi-agent framework, no network on the
-default path. Deferred to later roadmap stages; see `docs/research/00-...` §6.
+No database service, no heavy multi-agent framework, no network on the default
+path. See `CLAUDE.md` for the hard rules and design principles.
