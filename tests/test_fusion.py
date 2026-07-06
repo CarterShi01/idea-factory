@@ -7,12 +7,12 @@ dedicated file so it doesn't collide with the other round's test edits.
 
 from datetime import date
 
-from idea_core.factors import build_cost, moat_signal
-from idea_core.llm import LLMResponse, MockBackend
-from idea_core.models import IdeaCandidate, ScoredCandidate
-from idea_gen.generate import _fusion_candidates_from_response, generate_llm
-from idea_gen.normalize import normalize_record
-from idea_gen.ranks import select_diverse_top_n
+from idea_factory.factors import build_cost, moat_signal
+from idea_factory.runtime.llm import LLMResponse, MockBackend
+from idea_factory.contract.models import IdeaCandidate, ScoredCandidate
+from idea_factory.stages.generate.llm import _fusion_candidates_from_response, generate_llm
+from idea_factory.stages.recall.normalize import normalize_record
+from idea_factory.stages.rank.select import select_diverse_top_n
 
 REF_DATE = date(2026, 6, 13)
 

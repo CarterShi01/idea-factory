@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from idea_core import ledger
-from idea_core.llm import LLMResponse, MockBackend
-from idea_eval import retro
+from idea_factory.runtime import ledger
+from idea_factory.runtime.llm import LLMResponse, MockBackend
+from idea_factory.stages.retro import outcomes as retro
 
 
 def test_record_outcome_writes_ledger(tmp_path):

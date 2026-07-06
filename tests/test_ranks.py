@@ -7,13 +7,13 @@ These tests pin the corrected emphasis: strong pain + real payment beats fresh-o
 
 from datetime import date
 
-from idea_gen.ranks import (
+from idea_factory.stages.rank.score import (
     DEFAULT_WEIGHTS,
     _COMMODITY_DIST_PENALTY,
     _COMMODITY_DIST_THRESHOLD,
     score_candidate,
 )
-from idea_core.models import IdeaCandidate
+from idea_factory.contract.models import IdeaCandidate
 
 TODAY = date(2026, 6, 15)
 

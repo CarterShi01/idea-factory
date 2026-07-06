@@ -1,8 +1,9 @@
 from datetime import date
 
-from idea_eval.evaluate import KILL, PURSUE, evaluate_all, evaluate_idea
-from idea_eval.pipeline import run_evaluation
-from idea_gen.pipeline import run_pipeline
+from idea_factory import pipeline
+from idea_factory.contract import artifacts
+from idea_factory.contract.models import KILL, PURSUE
+from idea_factory.stages.diligence.gate import evaluate_all, evaluate_idea
 
 REF_DATE = date(2026, 6, 13)
 
@@ -99,13 +100,13 @@ def test_payment_signal_lifts_rubric_score():
     assert strong.eval_score > weak.eval_score
 
 
-def test_end_to_end_gen_then_eval(tmp_path):
-    # gen produces ideas.json, eval consumes it -> the two halves connect on disk.
-    gen = run_pipeline(data_dir="data", output_dir=tmp_path, today=REF_DATE)
-    result = run_evaluation(
-        input_path=gen.json_path, output_dir=tmp_path, today=REF_DATE
-    )
-    assert result.evaluated == len(gen.scored)
-    assert result.pursue + result.review + result.killed == result.evaluated
-    assert result.json_path.exists()
-    assert result.memos_path.exists()
+def test_end_to_end_full_funnel(tmp_path):
+    # 八段全漏斗:段间只经磁盘工件连接。
+    res = pipeline.run(data_dir="data", output_dir=tmp_path, today=REF_DATE, version=False)
+    coarse = artifacts.load_items(tmp_path, "rank")
+    pf = res.stage("portfolio")
+    assert pf.entered == len(coarse)
+    assert pf.extra["pursue"] + pf.extra["review"] + pf.extra["killed"] == pf.entered
+    assert artifacts.artifact_path(tmp_path, "portfolio").exists()
+    assert (tmp_path / "decision_memos.md").exists()
+    assert (tmp_path / "weekly_report.md").exists()

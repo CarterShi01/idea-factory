@@ -13,7 +13,7 @@ from pathlib import Path
 
 import yaml
 
-from idea_core.llm import load_step_config
+from idea_factory.runtime.llm import load_step_config
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _CONFIG_DIR = _REPO_ROOT / "config" / "llm"

@@ -1,5 +1,6 @@
-from idea_gen.dedup import dedupe_signals, jaccard
-from idea_gen.normalize import normalize_record
+from idea_factory.stages.triage.dedup import dedupe_signals
+from idea_factory.runtime.textsim import jaccard
+from idea_factory.stages.recall.normalize import normalize_record
 
 
 def _sig(title, pain):

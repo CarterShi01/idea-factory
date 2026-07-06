@@ -1,10 +1,9 @@
 from datetime import date
 
-from idea_core.llm import LLMResponse, MockBackend
-from idea_gen.crosscheck import corroborate
-from idea_gen.persona import load_taxonomy, select_segments
-from idea_gen.persona.synthesize import synthesize_pains
-from idea_gen.pipeline import run_pipeline
+from idea_factory.runtime.llm import LLMResponse, MockBackend
+from idea_factory.stages.recall.persona.crosscheck import corroborate
+from idea_factory.stages.recall.persona import load_taxonomy, select_segments
+from idea_factory.stages.recall.persona.synthesize import synthesize_pains
 
 
 def test_corroborate_matches_real_signal():
@@ -38,7 +37,7 @@ def test_pipeline_persona_backend_mock(tmp_path):
         return LLMResponse(id=req.id, data={"pains": [{"summary": f"痛点-{req.id}", "verbatim": "x"}]})
 
     # inject persona LLM via collect_all path by using mock backend name + monkeypatch-free:
-    from idea_gen import collect
+    from idea_factory.stages.recall import collect
     raw = collect.collect_all("data", persona_llm=MockBackend(responder))
     persona = [r for r in raw if r.get("source") == "pain_persona"]
     assert persona and all(r["source_name"] == "persona_llm" for r in persona)

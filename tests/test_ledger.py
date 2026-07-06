@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from idea_core import ledger
+from idea_factory.runtime import ledger
 
 
 def test_next_run_id_increments_per_day(tmp_path):

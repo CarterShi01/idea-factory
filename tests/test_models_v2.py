@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from idea_core.models import (
+from idea_factory.contract.models import (
     EVIDENCE_COMPETITOR_PRICING,
     EVIDENCE_PAYING_PROOF,
     Evidence,

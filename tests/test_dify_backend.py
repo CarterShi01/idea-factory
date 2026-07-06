@@ -6,8 +6,8 @@ read End-node output `result`, extract JSON when a schema is present.
 """
 import json
 
-import idea_core.llm as llm
-from idea_core.llm import DifyBackend, LLMRequest, get_backend
+import idea_factory.runtime.llm as llm
+from idea_factory.runtime.llm import DifyBackend, LLMRequest, get_backend
 
 
 class _FakeResp:

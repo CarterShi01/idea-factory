@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from idea_core.llm import LLMResponse, MockBackend
-from idea_eval.evaluate import KILL, PURSUE, REVIEW, Evaluation
-from idea_eval.persona_pressure import run_persona_pressure
+from idea_factory.runtime.llm import LLMResponse, MockBackend
+from idea_factory.contract.models import KILL, PURSUE, REVIEW, Evaluation
+from idea_factory.stages.diligence.persona_pressure import run_persona_pressure
 
 _POOL = [
     {"persona": "蒙语母语中老年人", "domain": "mongolian.elderly"},

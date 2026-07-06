@@ -1,5 +1,5 @@
-from idea_core.state import SeenStore, SignalHistory
-from idea_core.trends import PEAKED, RISING, STEADY, classify
+from idea_factory.runtime.state import SeenStore, SignalHistory
+from idea_factory.runtime.trends import PEAKED, RISING, STEADY, classify
 
 
 def test_seenstore_observe_and_dedup(tmp_path):

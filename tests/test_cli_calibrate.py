@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from idea_eval.cli import main
+from idea_factory.cli import main
 
 
 def test_calibrate_subcommand_reports_insufficient_data(tmp_path, capsys):

@@ -76,7 +76,7 @@ def test_funnel_empty_ledger(server):
 
 def test_funnel_reflects_ledger_data(server):
     base, app, data_dir, _ = server
-    from idea_core import ledger
+    from idea_factory.runtime import ledger
 
     ledger.log_impressions_bulk(
         data_dir, "gen-1", "2026-W27", "triage_signal",
@@ -90,13 +90,13 @@ def test_funnel_reflects_ledger_data(server):
 
 def test_verdicts_and_outcomes_endpoints(server):
     base, app, data_dir, _ = server
-    from idea_core import ledger
+    from idea_factory.runtime import ledger
 
     ledger.log_verdict(data_dir, {"idea_id": "a", "verdict": "pursue"}, actor="system")
     status, data = _get(f"{base}/api/ledger/verdicts")
     assert status == 200 and len(data) == 1
 
-    from idea_eval import retro
+    from idea_factory.stages.retro import outcomes as retro
     retro.record_outcome(data_dir, "a", "2026-07-12", "signups", 7.0, target=10.0)
     status, data = _get(f"{base}/api/ledger/outcomes")
     assert status == 200 and len(data) == 1
@@ -104,7 +104,7 @@ def test_verdicts_and_outcomes_endpoints(server):
 
 def test_trace_endpoint_requires_params_and_reads_back(server):
     base, app, data_dir, _ = server
-    from idea_core import ledger
+    from idea_factory.runtime import ledger
 
     status, data = _get(f"{base}/api/ledger/trace")
     assert status == 400
@@ -124,7 +124,7 @@ def test_founder_label_writes_and_validates(server):
     status, data = _post(f"{base}/api/ledger/label", {"candidate_id": "a", "action": "star"})
     assert status == 200 and data["ok"] is True
 
-    from idea_core import ledger
+    from idea_factory.runtime import ledger
     records = ledger.read_jsonl(ledger.ledger_dir(data_dir) / ledger.VERDICTS)
     assert len(records) == 1
     assert records[0]["event"] == "founder_star"

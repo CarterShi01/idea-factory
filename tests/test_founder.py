@@ -8,7 +8,7 @@ into the distribution_fit reach vocab. All offline.
 
 import json
 
-from idea_core.llm import (
+from idea_factory.runtime.llm import (
     build_request,
     load_founder_profile,
     render_founder_block,
@@ -53,8 +53,8 @@ def test_build_request_respects_skip_founder():
 
 
 def test_distribution_fit_lifts_founder_reachable_audiences():
-    from idea_core.models import IdeaCandidate
-    from idea_core.factors import distribution_fit
+    from idea_factory.contract.models import IdeaCandidate
+    from idea_factory.factors import distribution_fit
 
     def _c(target_user):
         return IdeaCandidate(

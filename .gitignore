@@ -16,6 +16,7 @@ venv/
 # Generated pipeline output (regenerate via the pipeline; never hand-edit)
 data/processed/*.json
 data/processed/*.md
+data/processed/versions/
 
 # LLM batch request/response packs (CC-handoff mode)
 data/llm_jobs/

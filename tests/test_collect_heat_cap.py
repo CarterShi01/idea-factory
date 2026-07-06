@@ -1,4 +1,4 @@
-from idea_gen.collect import _cap_english_by_heat
+from idea_factory.stages.recall.collect import _cap_english_by_heat
 
 
 def _en(i):

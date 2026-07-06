@@ -1,0 +1,121 @@
+"""Stage 5 -- factor scoring + time decay + diversity-aware ranking.
+
+* **alpha** = weighted sum of the factor scores, then multiplied by a time-decay
+  term. Opportunity windows decay: the longer ago a signal was observed, the
+  more crowded the space tends to be, so older candidates lose ground (but never
+  to zero -- they keep a floor).
+* **ranking** uses a lightweight MMR (maximal marginal relevance) pass so the
+  final list optimizes both *novelty* (each item scores well) and *diversity*
+  (the set isn't ten variations of one theme).
+
+Default weights put the most mass on ``pain_intensity`` -- validated need is the
+scarce ingredient, per the research.
+
+Round 2(投资人复评严重度④:alpha 排序过度依赖 market_freshness、付费信号没进排序)。
+按 round1 给的方向重配权:把**痛点强度**和新增的**付费信号**(真实付费意愿是最稀缺、最值钱
+的证据)抬成排序主力,把**市场新鲜度**降下来——避免『蹭热点但没人愿付费』的 idea 仅凭新鲜度
+排到前面。
+
+ff2 founder-fit(投资人复评 ff2,本轮迭代③:distribution_fit 权重太低、没起过滤作用):
+ff2 里 dist=0.93(获客垄断)和 dist=0.21(纯通用货)**都进了 top**——说明 0.05 的权重让
+『获客垄断性』对排序几乎没影响。本轮**大幅提高 distribution_fit 权重**(0.05→0.25,从陪跑
+小权重升为与痛点强度并列的排序主力),让『别人复制能不能拿到同样渠道』真正决定排序。**同时加
+一道硬降权门**(:data:`_COMMODITY_DIST_GATE`):distribution_fit < 0.3 的『无独占渠道通用货』
+alpha 直接乘以重罚系数,确保 dist=0.21 这类即便其他因子高也压不进 top——这就是 ff2 要的
+『让获客垄断真正过滤』。保留 7 具名因子契约,权重和为 1.0。
+"""
+
+from __future__ import annotations
+
+import math
+from datetime import date
+
+from idea_factory.factors import compute_factors
+from idea_factory.contract.models import IdeaCandidate, ScoredCandidate
+
+DEFAULT_WEIGHTS = {
+    # ff2: distribution_fit 升为与 pain_intensity 并列的排序主力(0.05→0.25),
+    # 让『获客垄断性』真正决定排序;痛点强度/付费信号仍是核心证据轴。
+    "pain_intensity": 0.25,       # 痛点强度(真实需求,排序主力之一)
+    "distribution_fit": 0.25,     # ff2: 获客垄断性升为排序主力(原 0.05)
+    "payment_signal": 0.20,       # 真实付费意愿(最稀缺证据)
+    "moat_signal": 0.12,          # 护城河(ff2:略抬,壁垒该影响排序)
+    "market_freshness": 0.10,     # 别只靠蹭热点上位
+    "build_cost": 0.05,           # 可落地性(round1 称 feasibility)
+    "competition_density": 0.03,  # 竞争稀缺度(契约因子,小权重)
+}
+assert abs(sum(DEFAULT_WEIGHTS.values()) - 1.0) < 1e-9, "alpha weights must sum to 1.0"
+
+# ff2 硬降权门:获客垄断性是 ff2 唯一真正分水岭。distribution_fit < 阈值 = 无独占渠道的
+# 通用货(纯开发者社区/公开市场/谁都能投放),即便痛点/付费/新鲜度都高,也必须压出 top——
+# 否则就重蹈 ff2『dist=0.21 仍进 top』的覆辙。这不是软权重能保证的(高的其他因子能把它抬
+# 回来),所以用一道乘性硬罚:低于阈值的候选 alpha 乘以 _COMMODITY_DIST_PENALTY。阈值与
+# 罚系数对齐 distribution_fit 的分档(referral 起步 0.3,故 <0.3 即『连引荐渠道都没有』)。
+_COMMODITY_DIST_THRESHOLD = 0.3
+_COMMODITY_DIST_PENALTY = 0.4
+
+_HALF_LIFE_DAYS = 30.0      # opportunity-window half life
+_DECAY_FLOOR = 0.4          # an ancient signal still retains 40% of its alpha
+
+
+def _age_days(observed_on: str, today: date) -> int:
+    try:
+        observed = date.fromisoformat(observed_on)
+    except (ValueError, TypeError):
+        return 0
+    return max(0, (today - observed).days)
+
+
+def _decay(observed_on: str, today: date) -> float:
+    age = _age_days(observed_on, today)
+    raw = math.exp(-math.log(2) / _HALF_LIFE_DAYS * age)
+    return _DECAY_FLOOR + (1 - _DECAY_FLOOR) * raw
+
+
+def _load_funnel() -> dict:
+    """漏斗参数(config/funnel.json):切分量 + 分桶权重 + 打散配额。缺失/坏档走内置默认。"""
+    from idea_factory.runtime.config import load_funnel
+
+    return load_funnel()
+
+
+def _weights_for(source: str, funnel: dict) -> dict[str, float]:
+    """按来源取粗排权重集(funnel.coarse.weights_by_source);缺则用 DEFAULT_WEIGHTS。"""
+    by_src = (funnel.get("coarse", {}) or {}).get("weights_by_source", {})
+    return by_src.get(source) or by_src.get("default") or DEFAULT_WEIGHTS
+
+
+def score_candidate(
+    candidate: IdeaCandidate,
+    today: date,
+    weights: dict[str, float] | None = None,
+) -> ScoredCandidate:
+    weights = weights or DEFAULT_WEIGHTS
+    factors = compute_factors(candidate)
+    base = sum(weights.get(name, 0.0) * value for name, value in factors.items())
+    decay = _decay(candidate.observed_on, today)
+    # ff2 硬降权门:无独占获客渠道的通用货(distribution_fit 低于阈值)按重罚系数压低,
+    # 让『获客垄断』真正过滤 top,而不是被其他高因子抬回来(ff2 dist=0.21 仍进 top 的病根)。
+    dist = factors.get("distribution_fit", 1.0)
+    commodity_penalty = _COMMODITY_DIST_PENALTY if dist < _COMMODITY_DIST_THRESHOLD else 1.0
+    return ScoredCandidate(
+        candidate=candidate,
+        factors=factors,
+        alpha=round(base * decay * commodity_penalty, 4),
+        decay=round(decay, 4),
+    )
+
+
+def score(
+    candidates: list[IdeaCandidate],
+    today: date,
+    weights: dict[str, float] | None = None,
+) -> list[ScoredCandidate]:
+    """粗排打分。``weights`` 给定 → 全量用它(向后兼容);``None`` → **按来源分桶**取权重
+    (英文HN主靠热度+需求、中文主靠 founder_fit×痛点,见 config/funnel.json)。"""
+    if weights is not None:
+        return [score_candidate(c, today, weights) for c in candidates]
+    funnel = _load_funnel()
+    return [score_candidate(c, today, _weights_for(c.source, funnel)) for c in candidates]
+
+

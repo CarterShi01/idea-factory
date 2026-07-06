@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "idea-factory"
 version = "0.1.0"
-description = "Offline MVP that turns three-source signals into ranked startup-idea candidates"
+description = "Eight-stage funnel that turns money-flow signals into screened, evidence-backed startup ideas"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = []
@@ -17,8 +17,7 @@ dev = ["pytest>=7.0", "pyyaml>=6.0"]  # pyyaml: test-only, parses dify/flows/*.y
 stealth = ["scrapling>=0.3", "playwright>=1.40"]
 
 [project.scripts]
-idea-gen = "idea_gen.cli:main"
-idea-eval = "idea_eval.cli:main"
+idea = "idea_factory.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

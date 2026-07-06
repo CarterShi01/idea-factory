@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from idea_core.models import SOURCE_EXTERNAL
-from idea_gen.sources import CollectContext, REGISTRY, ensure_loaded
+from idea_factory.contract.models import SOURCE_EXTERNAL
+from idea_factory.stages.recall.channels import CollectContext, REGISTRY, ensure_loaded
 
 REPO_DATA_DIR = Path("data")
 

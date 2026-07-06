@@ -1,5 +1,5 @@
-from idea_gen.persona import load_taxonomy
-from idea_gen.persona.derive import derive_segments, save_derived, update_derived
+from idea_factory.stages.recall.persona import load_taxonomy
+from idea_factory.stages.recall.persona.derive import derive_segments, save_derived, update_derived
 
 
 def test_derive_recurring_target_users():

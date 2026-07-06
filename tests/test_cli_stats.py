@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from idea_core import ledger
-from idea_eval.cli import main
+from idea_factory.runtime import ledger
+from idea_factory.cli import main
 
 
 def test_stats_subcommand_prints_report(tmp_path, capsys):

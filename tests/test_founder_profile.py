@@ -127,7 +127,7 @@ def test_put_valid_writes_and_factors_can_read(server, monkeypatch):
     # factors._load_founder_reach reads config/founder.json via IDEA_FOUNDER_PROFILE;
     # point it at the file we just wrote and confirm the new keyword folds in.
     monkeypatch.setenv("IDEA_FOUNDER_PROFILE", str(path))
-    import idea_core.factors as factors
+    import idea_factory.factors as factors
 
     reach = factors._load_founder_reach()
     assert "fintech" in reach

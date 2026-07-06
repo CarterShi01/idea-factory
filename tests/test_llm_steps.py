@@ -8,12 +8,16 @@ from datetime import date
 
 import pytest
 
-from idea_core.llm import LLMResponse, MockBackend, PendingHandoff
-from idea_eval.evaluate import KILL, PURSUE, critique_survivors, evaluate_all, judge_survivors
-from idea_eval.pipeline import run_evaluation
-from idea_gen.generate import generate_llm
-from idea_gen.normalize import normalize_record
-from idea_gen.pipeline import run_pipeline
+from idea_factory.runtime.llm import LLMResponse, MockBackend, PendingHandoff
+from idea_factory.contract.models import KILL, PURSUE
+from idea_factory.stages.diligence.critique import critique_survivors
+from idea_factory.stages.diligence.gate import evaluate_all
+from idea_factory.stages.diligence.judge import judge_survivors
+from idea_factory import pipeline
+from idea_factory.contract import artifacts
+from idea_factory.contract.models import Evaluation
+from idea_factory.stages.generate.llm import generate_llm
+from idea_factory.stages.recall.normalize import normalize_record
 
 REF_DATE = date(2026, 6, 13)
 
@@ -73,15 +77,16 @@ def test_pipeline_gen_backend_mock(tmp_path):
             data={"candidates": [{"title": "T", "pain": "p", "solution": "s", "target_user": "u"}]},
         )
 
-    res = run_pipeline(
+    res = pipeline.run(
         data_dir="data",
         output_dir=tmp_path,
         today=REF_DATE,
-        gen_backend="mock",
-        llm=MockBackend(responder),
+        to_stage="rank",
+        generate_backend="mock",
+        backends={"generate": MockBackend(responder)},
     )
-    assert res.candidate_count > 0
-    assert res.scored
+    assert res.stage("generate").survived > 0
+    assert artifacts.load_items(tmp_path, "rank")
 
 
 # --- B: judge_survivors ---------------------------------------------------
@@ -121,22 +126,23 @@ def test_judge_noop_when_no_data():
 
 
 def test_eval_pipeline_with_judge_backend(tmp_path):
-    gen = run_pipeline(data_dir="data", output_dir=tmp_path, today=REF_DATE)
-
     def responder(req):
         return LLMResponse(
             id=req.id,
             data={"verdict": "review", "score": 50, "killer_objection": "meh", "cheap_experiment": "t"},
         )
 
-    res = run_evaluation(
-        input_path=gen.json_path,
+    pipeline.run(
+        data_dir="data",
         output_dir=tmp_path,
         today=REF_DATE,
+        version=False,
         judge_backend="mock",
-        llm=MockBackend(responder),
+        critique=False,
+        backends={"judge": MockBackend(responder)},
     )
-    assert any(e.judged_by == "llm" for e in res.evaluations)
+    evals = [Evaluation.from_dict(d) for d in artifacts.load_items(tmp_path, "diligence")]
+    assert any(e.judged_by == "llm" for e in evals)
 
 
 # --- B-prep: devil's advocate critique ----------------------------------
@@ -210,10 +216,6 @@ def test_judge_sees_critique_in_user_prompt_and_records_rebuttal():
 
 def test_pipeline_runs_critique_then_judge(tmp_path):
     """The pipeline should call critique first, then judge — verify by counting hits."""
-    from idea_gen.pipeline import run_pipeline
-
-    gen = run_pipeline(data_dir="data", output_dir=tmp_path, today=REF_DATE)
-
     critique_calls = {"n": 0}
     judge_calls = {"n": 0}
 
@@ -237,27 +239,24 @@ def test_pipeline_runs_critique_then_judge(tmp_path):
             },
         )
 
-    res = run_evaluation(
-        input_path=gen.json_path,
+    pipeline.run(
+        data_dir="data",
         output_dir=tmp_path,
         today=REF_DATE,
+        version=False,
         judge_backend="mock",
         critique=True,
-        llm=MockBackend(judge_responder),
-        critique_llm=MockBackend(critique_responder),
+        backends={"judge": MockBackend(judge_responder), "critique": MockBackend(critique_responder)},
     )
-    n_survivors = sum(1 for e in res.evaluations if e.verdict in ("pursue", "review"))
+    evals = [Evaluation.from_dict(d) for d in artifacts.load_items(tmp_path, "diligence")]
+    n_survivors = sum(1 for e in evals if e.verdict in ("pursue", "review"))
     assert critique_calls["n"] == n_survivors
     assert judge_calls["n"] == n_survivors
-    assert any(e.critique for e in res.evaluations)
-    assert any(e.judge_rebuttal == "ack" for e in res.evaluations)
+    assert any(e.critique for e in evals)
+    assert any(e.judge_rebuttal == "ack" for e in evals)
 
 
 def test_pipeline_skips_critique_when_disabled(tmp_path):
-    from idea_gen.pipeline import run_pipeline
-
-    gen = run_pipeline(data_dir="data", output_dir=tmp_path, today=REF_DATE)
-
     critique_calls = {"n": 0}
 
     def critique_responder(req):
@@ -276,14 +275,14 @@ def test_pipeline_skips_critique_when_disabled(tmp_path):
             },
         )
 
-    run_evaluation(
-        input_path=gen.json_path,
+    pipeline.run(
+        data_dir="data",
         output_dir=tmp_path,
         today=REF_DATE,
+        version=False,
         judge_backend="mock",
         critique=False,
-        llm=MockBackend(judge_responder),
-        critique_llm=MockBackend(critique_responder),
+        backends={"judge": MockBackend(judge_responder), "critique": MockBackend(critique_responder)},
     )
     assert critique_calls["n"] == 0
 
@@ -387,7 +386,7 @@ def test_high_confidence_kill_is_not_demoted():
 def test_build_request_reads_model_from_env(monkeypatch):
     """model_env lets each step (generate/critique/judge) bind to a different
     model so generation ≠ evaluation isn't enforced by a single global default."""
-    from idea_core.llm import build_request
+    from idea_factory.runtime.llm import build_request
 
     monkeypatch.setenv("MY_TEST_MODEL_VAR", "tc-think")
     config = {"system": "s", "model_env": "MY_TEST_MODEL_VAR"}
@@ -396,7 +395,7 @@ def test_build_request_reads_model_from_env(monkeypatch):
 
 
 def test_build_request_falls_back_when_env_missing(monkeypatch):
-    from idea_core.llm import build_request
+    from idea_factory.runtime.llm import build_request
 
     monkeypatch.delenv("MY_TEST_MODEL_VAR", raising=False)
     config = {"system": "s", "model_env": "MY_TEST_MODEL_VAR", "model": "fallback-model"}
@@ -505,11 +504,12 @@ def test_judge_scores_tolerate_partial_dims():
 
 def test_gen_cc_backend_raises_pending_handoff(tmp_path):
     with pytest.raises(PendingHandoff) as ei:
-        run_pipeline(
+        pipeline.run(
             data_dir="data",
             output_dir=tmp_path,
             today=REF_DATE,
-            gen_backend="cc",
+            to_stage="rank",
+            generate_backend="cc",
             job_dir=tmp_path / "jobs",
         )
     assert ei.value.request_path.exists()  # request pack written for the human

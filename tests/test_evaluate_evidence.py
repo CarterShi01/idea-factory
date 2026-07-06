@@ -4,12 +4,9 @@ apply_evidence / enforce_evidence_grounding / enforce_forced_distribution.
 
 from __future__ import annotations
 
-from idea_eval.evaluate import (
-    KILL,
-    PURSUE,
-    REVIEW,
-    Evaluation,
-    apply_evidence,
+from idea_factory.contract.models import KILL, PURSUE, REVIEW, Evaluation
+from idea_factory.stages.diligence.apply import apply_evidence
+from idea_factory.stages.diligence.enforce import (
     enforce_evidence_grounding,
     enforce_forced_distribution,
 )

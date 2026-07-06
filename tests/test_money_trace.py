@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from idea_core.models import Signal
-from idea_gen.generate import _signal_fields
-from idea_gen.normalize import normalize_record
+from idea_factory.contract.models import Signal
+from idea_factory.stages.generate.llm import _signal_fields
+from idea_factory.stages.recall.normalize import normalize_record
 
 
 def test_signal_default_money_trace_is_empty():

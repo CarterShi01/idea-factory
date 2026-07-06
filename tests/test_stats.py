@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from idea_core import ledger
-from idea_eval import retro, stats
+from idea_factory.runtime import ledger
+from idea_factory.stages.retro import outcomes as retro, stats
 
 
 def test_verdict_distribution_counts_system_verdicts_only(tmp_path):

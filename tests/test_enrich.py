@@ -6,8 +6,8 @@ import json
 from datetime import date
 from pathlib import Path
 
-from idea_core.models import EVIDENCE_COMPETITOR_PRICING, EVIDENCE_HIRING, IdeaCandidate
-from idea_eval import enrich
+from idea_factory.contract.models import EVIDENCE_COMPETITOR_PRICING, EVIDENCE_HIRING, IdeaCandidate
+from idea_factory.stages import enrich
 
 REF_DATE = date(2026, 7, 5)
 

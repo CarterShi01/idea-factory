@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from idea_eval.evaluate import KILL, PURSUE, REVIEW, Evaluation
-from idea_eval.export import write_weekly_report
+from idea_factory.contract.models import KILL, PURSUE, REVIEW, Evaluation
+from idea_factory.stages.portfolio.report import write_weekly_report
 
 
 def _idea(id_, **kw):

@@ -2,10 +2,18 @@
 
 from datetime import date
 
-from idea_core.factors import founder_fit
-from idea_core.models import IdeaCandidate, bucket_of
-from idea_eval.evaluate import REVIEW, Evaluation, diversify_select
-from idea_gen import ranks
+from idea_factory.factors import founder_fit
+from idea_factory.contract.models import IdeaCandidate, bucket_of
+from idea_factory.contract.models import REVIEW, Evaluation
+from idea_factory.stages.portfolio.diversify import diversify_select
+from idea_factory.stages.rank.score import score as _score
+from idea_factory.stages.rank.select import coarse_select, rank as _rank
+
+
+class ranks:  # thin shim keeping the old call sites readable
+    score = staticmethod(_score)
+    rank = staticmethod(_rank)
+    coarse_select = staticmethod(coarse_select)
 
 
 def _cand(cid, source, title, target_user="用户", solution=""):

@@ -1,4 +1,4 @@
-from idea_core.factors import (
+from idea_factory.factors import (
     FACTORS,
     competition_density,
     compute_factors,
@@ -8,7 +8,7 @@ from idea_core.factors import (
     pain_intensity,
     payment_signal,
 )
-from idea_core.models import CONFIDENCE_SYNTHETIC, IdeaCandidate
+from idea_factory.contract.models import CONFIDENCE_SYNTHETIC, IdeaCandidate
 
 
 def _candidate(**kw) -> IdeaCandidate:

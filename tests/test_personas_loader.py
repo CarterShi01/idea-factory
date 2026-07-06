@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from idea_core.personas import load_persona_pool
+from idea_factory.runtime.personas import load_persona_pool
 
 
 def test_loads_repo_personas_json():

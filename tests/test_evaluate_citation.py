@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from idea_eval.evaluate import KILL, PURSUE, REVIEW, Evaluation, enforce_citation
+from idea_factory.contract.models import KILL, PURSUE, REVIEW, Evaluation
+from idea_factory.stages.diligence.enforce import enforce_citation
 
 
 def _eval(idea_id, verdict, judged_by="llm", evidence=None, judge_reasons=None) -> Evaluation:

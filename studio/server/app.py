@@ -5,7 +5,7 @@ A thin web layer over the idea-factory kernel:
   * exposes a small JSON API that reads the kernel's outputs and triggers runs
   * gates everything behind a single shared password (nginx does NOT auth)
 
-It imports the kernel in-process (idea_gen / idea_eval) — no subprocess, no DB,
+It imports the kernel in-process (idea_factory) — no subprocess, no DB,
 no extra runtime. Run:  python studio/server/app.py  (listens 127.0.0.1:3010)
 """
 
@@ -34,14 +34,14 @@ FOUNDER_PATH = REPO_ROOT / "config" / "founder.json"
 import sys
 
 sys.path.insert(0, str(REPO_ROOT / "src"))
-from idea_core import ledger, versioning  # noqa: E402
-from idea_core.llm import get_backend, load_dotenv, load_step_config  # noqa: E402
-from idea_gen.collect import collect_all  # noqa: E402
-from idea_gen.normalize import normalize  # noqa: E402
-from idea_gen.pipeline import run_pipeline  # noqa: E402
-from idea_eval import evaluate  # noqa: E402
-from idea_eval import stats as eval_stats  # noqa: E402
-from idea_eval.pipeline import run_evaluation  # noqa: E402
+from idea_factory import pipeline  # noqa: E402
+from idea_factory.runtime import ledger, versioning  # noqa: E402
+from idea_factory.runtime.llm import get_backend, load_dotenv, load_step_config  # noqa: E402
+from idea_factory.stages.diligence import gate as diligence_gate  # noqa: E402
+from idea_factory.stages.diligence import judge as diligence_judge  # noqa: E402
+from idea_factory.stages.recall.collect import collect_all  # noqa: E402
+from idea_factory.stages.recall.normalize import normalize  # noqa: E402
+from idea_factory.stages.retro import stats as eval_stats  # noqa: E402
 
 load_dotenv(REPO_ROOT / ".env")
 
@@ -102,7 +102,7 @@ def _mtime_iso(path: Path) -> str | None:
 
 
 def _factor_names() -> list[str]:
-    from idea_core.factors import FACTORS
+    from idea_factory.factors import FACTORS
 
     return list(FACTORS)
 
@@ -131,8 +131,16 @@ def _artifact_path(name: str, version: str | None) -> Path:
     return PROCESSED / name
 
 
+def _unwrap(data, default):
+    """Stage artifacts are envelopes ({schema_version, items, ...}); older flat
+    files were bare lists. Serve the items either way."""
+    if isinstance(data, dict) and "items" in data:
+        return data["items"]
+    return data if isinstance(data, list) else default
+
+
 def _load_json(name: str, version: str | None, default):
-    return _read_json(_artifact_path(name, version), default)
+    return _unwrap(_read_json(_artifact_path(name, version), default), default)
 
 
 def overview(version: str | None = None) -> dict:
@@ -176,7 +184,7 @@ def top3() -> dict:
     file when no versions exist).
     """
     path = _artifact_path("screened.json", None)
-    screened = _read_json(path, [])
+    screened = _unwrap(_read_json(path, []), [])
     survivors = [e for e in screened if e.get("verdict") in _SURVIVING_VERDICTS][:3]
     mtime = _mtime_iso(path)  # None if file missing
     ref = mtime or datetime.now().isoformat(timespec="seconds")
@@ -260,22 +268,23 @@ def _ref_date(body: dict) -> date:
 
 
 def do_generate(body: dict) -> dict:
-    r = run_pipeline(
+    r = pipeline.run(
         data_dir=DATA_DIR,
         output_dir=PROCESSED,
         today=_ref_date(body),
+        to_stage="rank",
         top_n=int(body.get("top_n", 15)),
         sources=body.get("sources") or None,
-        gen_backend=body.get("backend", "rule"),
+        generate_backend=body.get("backend", "rule"),
         live=bool(body.get("live", False)),
         use_state=bool(body.get("use_state", False)),
         persona_backend=body.get("persona_backend", "static"),
     )
     return {
-        "raw_count": r.raw_count,
-        "signal_count": r.signal_count,
-        "deduped_count": r.deduped_count,
-        "candidate_count": r.candidate_count,
+        "raw_count": r.stage("recall").entered,
+        "signal_count": r.stage("recall").survived,
+        "deduped_count": r.stage("triage").survived,
+        "candidate_count": r.stage("generate").survived,
     }
 
 
@@ -300,22 +309,28 @@ def do_inbox(body: dict) -> dict:
 
 
 def do_evaluate(body: dict) -> dict:
-    r = run_evaluation(
-        input_path=PROCESSED / "ideas.json",
+    r = pipeline.run(
+        data_dir=DATA_DIR,
         output_dir=PROCESSED,
         today=_ref_date(body),
+        from_stage="enrich",
+        to_stage="portfolio",
         top_n=int(body.get("top_n", 20)),
         floor=float(body.get("floor", 0.25)),
         judge_backend=body.get("backend", "none"),
     )
-    return {"evaluated": r.evaluated, "pursue": r.pursue, "review": r.review, "killed": r.killed}
+    pf = r.stage("portfolio")
+    return {
+        "evaluated": pf.entered,
+        "pursue": pf.extra.get("pursue", 0),
+        "review": pf.extra.get("review", 0),
+        "killed": pf.extra.get("killed", 0),
+    }
 
 
 # --- pipeline-v2: ledger (funnel / trace / founder-labels) -----------------
-# Read-only views over data/ledger/* (docs/design/pipeline-v2-plan.md §6 M6).
-# Populated only when a run used idea_gen's --use-triage or idea_eval's
-# --require-evidence; an empty ledger just means those opt-in flags haven't
-# been exercised yet, not an error.
+# Read-only views over data/ledger/*. The ledger is always-on (every run logs
+# impressions/verdicts/traces); an empty ledger just means no run happened yet.
 
 
 def ledger_funnel() -> dict:
@@ -375,9 +390,9 @@ def do_whatif_judge(body: dict) -> dict:
         raise ValueError(f"idea {idea_id!r} not found in ideas.json")
     merged = {**idea, **overrides}
 
-    ev = evaluate.evaluate_idea(merged, floor=evaluate.DEFAULT_FLOOR)
+    ev = diligence_gate.evaluate_idea(merged, floor=diligence_gate.DEFAULT_FLOOR)
     llm = get_backend(backend_name)
-    evaluate.judge_survivors([ev], {idea_id: merged}, llm, load_step_config("judge"))
+    diligence_judge.judge_survivors([ev], {idea_id: merged}, llm, load_step_config("judge"))
     return {
         "idea_id": idea_id,
         "verdict": ev.verdict,

@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from idea_core.llm import (
+from idea_factory.runtime.llm import (
     CCHandoffBackend,
     LLMRequest,
     LLMResponse,

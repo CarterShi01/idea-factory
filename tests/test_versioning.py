@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from idea_core import versioning
+from idea_factory.runtime import versioning
 
 
 def _write_flat(processed, ideas, screened, ideas_md="# ideas", memos="# memos"):

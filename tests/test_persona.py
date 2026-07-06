@@ -1,4 +1,4 @@
-from idea_gen.persona import (
+from idea_factory.stages.recall.persona import (
     Segment,
     flatten_leaves,
     load_taxonomy,
