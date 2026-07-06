@@ -2,7 +2,7 @@
 name: run-llm-batch
 description: >-
   Fulfill an idea-factory LLM request pack BY HAND inside this Claude Code session
-  (Max pool). Use when idea-gen/idea-eval paused with "--*-backend cc" and wrote a
+  (Max pool). Use when `idea run` paused with "--*-backend cc" and wrote a
   data/llm_jobs/<job>.request.jsonl. You ARE the LLM here: read each request,
   produce a schema-conforming JSON answer, write <job>.response.jsonl. Invoke as
   "/run-llm-batch [job-name]" (job-name optional; auto-discovers the pending pack).
@@ -105,8 +105,8 @@ If you genuinely cannot answer one item, emit
    ```
 
 6. **Done.** Tell the user the response pack is ready and to resume by re-running
-   the original command, e.g. `idea-eval --judge-backend cc --date <date>` (or
-   `idea-gen --gen-backend cc ...`). The pipeline will read the responses and
+   the original command, e.g. `idea run --judge-backend cc --date <date>` (or
+   `idea run --generate-backend cc ...`). The pipeline will read the responses and
    continue.
 
 ## Notes
