@@ -20,7 +20,7 @@ import time
 from datetime import date, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 # --- locate repo root and import the kernel -------------------------------
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -141,6 +141,235 @@ def _unwrap(data, default):
 
 def _load_json(name: str, version: str | None, default):
     return _unwrap(_read_json(_artifact_path(name, version), default), default)
+
+
+# --- run-centric observability (Studio v2) --------------------------------
+# The 8-stage pipeline writes a per-stage artifact envelope + a ledger; these
+# helpers surface run_id, per-stage drill-down (survived/killed + why), and one
+# idea's full cross-stage lineage so the whole funnel is debuggable, not a
+# black box. Every read is best-effort and degrades gracefully (missing artifact
+# => impressions-only rows, flagged `degraded`).
+
+from idea_factory.contract.artifacts import ARTIFACTS as _STAGE_FILE  # {stage: filename}
+from idea_factory.contract.stage import STAGES as _FUNNEL_STAGES
+
+# Where a stage-drill row's *fields* come from. enrich's own artifact is evidence
+# (keyed by candidate), so its drilled entities are the ideas that entered it.
+_DRILL_ENTITY_FILE = {
+    "recall": "recall.json", "triage": "triage.json", "generate": "candidates.json",
+    "rank": "ideas.json", "enrich": "ideas.json", "diligence": "verdicts.json",
+    "portfolio": "screened.json",
+}
+# For killed items (absent from this stage's survivor artifact), pull fields from
+# the previous stage's artifact where the id space matches.
+_DRILL_PREV_FILE = {"triage": "recall.json", "rank": "candidates.json"}
+
+
+def _entity_id(item: dict) -> str:
+    return str(item.get("id") or item.get("idea_id") or "")
+
+
+def _by_id(items: list) -> dict[str, dict]:
+    return {_entity_id(i): i for i in items if isinstance(i, dict) and _entity_id(i)}
+
+
+def _version_for_run(run_id: str) -> str | None:
+    for v in versioning.list_versions(PROCESSED):
+        if isinstance(v, dict) and v.get("run_id") == run_id:
+            return v.get("id")
+    return None
+
+
+def _run_envelope(name: str, run_id: str) -> dict | None:
+    """Full envelope of artifact ``name`` for a specific run (version snapshot,
+    else the current flat file when it belongs to this run), else None."""
+    vid = _version_for_run(run_id)
+    if vid:
+        env = _read_json(PROCESSED / "versions" / vid / name, None)
+        if isinstance(env, dict):
+            return env
+    flat = _read_json(PROCESSED / name, None)
+    if isinstance(flat, dict) and flat.get("run_id") == run_id:
+        return flat
+    return None
+
+
+def _run_items(name: str, run_id: str) -> list:
+    env = _run_envelope(name, run_id)
+    return env.get("items", []) if isinstance(env, dict) else []
+
+
+def list_runs_summary() -> list[dict]:
+    """Every known run (version snapshots ∪ ledger), newest first."""
+    versions = {v.get("run_id"): v for v in versioning.list_versions(PROCESSED) if isinstance(v, dict)}
+    run_ids = set(ledger.list_runs(DATA_DIR)) | {r for r in versions if r}
+    out = []
+    for rid in run_ids:
+        if not rid:
+            continue
+        v = versions.get(rid)
+        out.append({
+            "run_id": rid,
+            "version_id": (v or {}).get("id"),
+            "date": (v or {}).get("created_at") or rid.rsplit("-", 1)[0].split("-", 1)[-1],
+            "week": (v or {}).get("week", ""),
+            "has_artifacts": v is not None,
+            "stages": ledger.stages_for_run(DATA_DIR, rid),
+        })
+    out.sort(key=lambda r: ledger._run_sort_key(r["run_id"]), reverse=True)
+    return out
+
+
+def run_funnel(run_id: str) -> dict:
+    """One run's 8-stage funnel: entered→survived, killed, rate, kill reasons."""
+    survival = ledger.channel_survival_rates(DATA_DIR, run_id=run_id)
+    stages = []
+    for st in _FUNNEL_STAGES:
+        if st == "portfolio":
+            continue  # portfolio logs no impressions; summarized from verdicts below
+        s = survival.get(st)
+        if not s:
+            continue
+        entered = s["survived"] + s["killed"]
+        stages.append({
+            "stage": st, "entered": entered, "survived": s["survived"],
+            "killed": s["killed"], "rate": s["rate"],
+            "kill_reasons": ledger.killed_by_breakdown(DATA_DIR, stage=st, run_id=run_id),
+            "has_artifact": _run_envelope(_STAGE_FILE.get(st, ""), run_id) is not None,
+        })
+    # portfolio row derived from screened.json verdicts
+    screened = _run_items("screened.json", run_id)
+    vd = {"pursue": 0, "review": 0, "kill": 0}
+    for e in screened:
+        vd[e.get("verdict", "kill")] = vd.get(e.get("verdict", "kill"), 0) + 1
+    survivors = vd["pursue"] + vd["review"]
+    if screened:
+        stages.append({
+            "stage": "portfolio", "entered": len(screened), "survived": survivors,
+            "killed": vd["kill"], "rate": round(survivors / len(screened), 4) if screened else 0.0,
+            "kill_reasons": {}, "has_artifact": bool(screened),
+        })
+    return {
+        "run_id": run_id,
+        "week": (_run_envelope("ideas.json", run_id) or {}).get("week", ""),
+        "date": (_run_envelope("ideas.json", run_id) or {}).get("date", ""),
+        "stages": stages,
+        "verdict_distribution": vd,
+        "totals": {
+            "entered": stages[0]["entered"] if stages else 0,
+            "survived_final": survivors,
+        },
+    }
+
+
+def stage_drill(run_id: str, stage: str) -> dict:
+    """Items that passed/died at one stage, each with why (killed_by / gate)."""
+    if stage not in _FUNNEL_STAGES:
+        raise ValueError(f"unknown stage {stage!r}")
+    imps = [r for r in ledger.impressions_for_run(DATA_DIR, run_id) if r.get("stage") == stage]
+    this_items = _by_id(_run_items(_DRILL_ENTITY_FILE.get(stage, ""), run_id))
+    prev_items = _by_id(_run_items(_DRILL_PREV_FILE[stage], run_id)) if stage in _DRILL_PREV_FILE else {}
+    # enrich gate (candidate_id -> {ready, missing}) from evidence.json extra
+    gate = {}
+    if stage == "enrich":
+        env = _run_envelope("evidence.json", run_id)
+        gate = (env or {}).get("gate", {}) if isinstance(env, dict) else {}
+    degraded = not this_items and not prev_items
+    items = []
+    for r in imps:
+        eid = r.get("entity_id", "")
+        fields = this_items.get(eid) or prev_items.get(eid) or {}
+        row = {
+            "id": eid,
+            "event": r.get("event"),
+            "killed_by": r.get("killed_by"),
+            "title": fields.get("title", ""),
+            "source": fields.get("source", ""),
+            "pain": fields.get("pain") or fields.get("pain_statement", ""),
+        }
+        if stage == "rank" and fields:
+            row["alpha"] = fields.get("alpha")
+            row["factors"] = fields.get("factors")
+        if stage == "enrich":
+            row["gate"] = gate.get(eid)
+        items.append(row)
+    survived = sum(1 for i in items if i["event"] == "survived")
+    killed = sum(1 for i in items if i["event"] == "killed")
+    return {
+        "run_id": run_id, "stage": stage, "entered": len(items),
+        "survived": survived, "killed": killed, "degraded": degraded, "items": items,
+    }
+
+
+def idea_lineage(run_id: str, idea_id: str) -> dict:
+    """One idea's full cross-stage journey + its LLM traces (T6.2)."""
+    candidate = _by_id(_run_items("candidates.json", run_id)).get(idea_id) \
+        or _by_id(_run_items("ideas.json", run_id)).get(idea_id)
+    signal_id = (candidate or {}).get("signal_id", "")
+    signal = _by_id(_run_items("recall.json", run_id)).get(signal_id)
+
+    imps = ledger.impressions_for_run(DATA_DIR, run_id)
+    by_stage_entity = {(r.get("stage"), r.get("entity_id")): r for r in imps}
+
+    def _imp(stage, eid):
+        r = by_stage_entity.get((stage, eid))
+        return {"survived": r.get("event") == "survived", "killed_by": r.get("killed_by")} if r else None
+
+    ranked = _by_id(_run_items("ideas.json", run_id)).get(idea_id)
+    evidence_items = [e for e in _run_items("evidence.json", run_id) if e.get("candidate_id") == idea_id]
+    gate = ((_run_envelope("evidence.json", run_id) or {}).get("gate", {}) or {}).get(idea_id)
+    verdict = _by_id(_run_items("verdicts.json", run_id)).get(idea_id) \
+        or _by_id(_run_items("screened.json", run_id)).get(idea_id)
+
+    traces = {}
+    for tstage in ("critique", "diligence", "ask"):
+        rows = [t for t in ledger.read_trace(DATA_DIR, run_id, tstage) if t.get("entity_id") == idea_id]
+        if rows:
+            traces[tstage] = rows
+    labels = [v for v in ledger.read_jsonl(ledger.ledger_dir(DATA_DIR) / ledger.VERDICTS)
+              if v.get("actor") == "founder" and v.get("candidate_id") == idea_id]
+
+    return {
+        "idea_id": idea_id, "run_id": run_id,
+        "signal": signal,
+        "triage": _imp("triage", signal_id) if signal_id else None,
+        "candidate": candidate,
+        "generate": _imp("generate", idea_id),
+        "rank": {
+            "factors": (ranked or {}).get("factors"), "alpha": (ranked or {}).get("alpha"),
+            "decay": (ranked or {}).get("decay"), "coarse_selected": ranked is not None,
+        } if candidate else None,
+        "enrich": {"evidence": evidence_items, "gate": gate},
+        "diligence": verdict,
+        "traces": traces,
+        "founder_labels": labels,
+    }
+
+
+def do_rerun_stage(body: dict) -> dict:
+    """Destructive single-stage (or range) rerun via pipeline.run(only=/from/to).
+
+    Overwrites data/processed/<artifact> and appends to the ledger, inheriting
+    run_id from the upstream artifact on disk. Downstream artifacts go stale
+    until they too are rerun -- the UI warns before calling this.
+    """
+    stage = body.get("stage")
+    if stage and stage not in _FUNNEL_STAGES:
+        raise ValueError(f"unknown stage {stage!r}")
+    today = _ref_date(body)
+    r = pipeline.run(
+        data_dir=DATA_DIR, output_dir=PROCESSED, today=today,
+        only=stage, from_stage=body.get("from"), to_stage=body.get("to"),
+        top_n=int(body.get("top_n", 15)), floor=body.get("floor"),
+        generate_backend=body.get("generate_backend", "rule"),
+        judge_backend=body.get("judge_backend", "none"),
+        live=bool(body.get("live", False)),
+    )
+    return {
+        "run_id": r.run_id, "week": r.week,
+        "stages": [{"stage": s.stage, "entered": s.entered, "survived": s.survived,
+                    "killed": s.killed} for s in r.stages],
+    }
 
 
 def overview(version: str | None = None) -> dict:
@@ -508,6 +737,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(do_label(body))
             if path == "/api/run/whatif-judge":
                 return self._json(do_whatif_judge(body))
+            if path == "/api/run/stage":
+                return self._json(do_rerun_stage(body))
         except ValueError as exc:  # bad input (missing field, unknown idea/backend) → 400
             return self._json({"error": str(exc)}, 400)
         except Exception as exc:  # noqa: BLE001 — surface run errors to the UI
@@ -546,6 +777,18 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"error": "unauthorized"}, 401)
         version = (query.get("version") or [None])[0]
         try:
+            # run-centric observability (prefix-matched): /api/runs, /api/run/<id>[/stage|idea/<x>]
+            if path == "/api/runs":
+                return self._json(list_runs_summary())
+            parts = [unquote(p) for p in path.strip("/").split("/")]  # api/run/<id>/...
+            if len(parts) >= 3 and parts[1] == "run":
+                run_id = parts[2]
+                if len(parts) == 3:
+                    return self._json(run_funnel(run_id))
+                if len(parts) == 5 and parts[3] == "stage":
+                    return self._json(stage_drill(run_id, parts[4]))
+                if len(parts) == 5 and parts[3] == "idea":
+                    return self._json(idea_lineage(run_id, parts[4]))
             if path == "/api/versions":
                 return self._json(versioning.list_versions(PROCESSED))
             if path == "/api/overview":

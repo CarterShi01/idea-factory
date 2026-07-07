@@ -28,8 +28,16 @@ from pathlib import Path
 
 from idea_factory.contract.models import bucket_of
 
-# The four flat artifacts a run produces; only the ones that exist get copied.
-_ARTIFACTS = ("ideas.json", "screened.json", "ideas.md", "decision_memos.md")
+# Every flat artifact a run produces; only the ones that exist get copied. Snapshotting
+# ALL 7 stage-boundary artifacts (not just the final two) makes each version a fully
+# replayable run -- the studio's per-stage drill / lineage can read any historical run,
+# not only the latest one still sitting in data/processed/. Storage is trivial (single user).
+_STAGE_ARTIFACTS = (
+    "recall.json", "triage.json", "candidates.json", "ideas.json",
+    "evidence.json", "verdicts.json", "screened.json",
+)
+_REPORT_ARTIFACTS = ("ideas.md", "decision_memos.md", "weekly_report.md")
+_ARTIFACTS = _STAGE_ARTIFACTS + _REPORT_ARTIFACTS
 _VALID_NAMES = frozenset(_ARTIFACTS)
 _INDEX_NAME = "index.json"
 _VERSIONS_DIR = "versions"
@@ -82,15 +90,27 @@ def next_version_id(processed_dir: str | Path, today_iso: str) -> str:
     return f"{today_iso}_{max_n + 1}"
 
 
+def _items(dest: Path, name: str) -> list:
+    """Read a stage artifact's ``items`` list, unwrapping the envelope.
+
+    Stage artifacts are envelopes ({schema_version, items, ...}); tolerate a bare
+    list too (legacy / hand-authored fixtures).
+    """
+    data = _read_json(dest / name, [])
+    if isinstance(data, dict):
+        return data.get("items", [])
+    return data if isinstance(data, list) else []
+
+
 def _stats(dest: Path) -> dict:
     """Count survivors (ui_count, capped) and their en/zh source split.
 
     Joins ``screened.json`` (which carries ``idea_id`` + ``verdict``) with
     ``ideas.json`` (which carries each idea's ``source``) to bucket survivors
-    via :func:`idea_core.models.bucket_of`. ``en + zh == ui_count``.
+    via :func:`idea_factory.contract.models.bucket_of`. ``en + zh == ui_count``.
     """
-    screened = _read_json(dest / "screened.json", [])
-    ideas = _read_json(dest / "ideas.json", [])
+    screened = _items(dest, "screened.json")
+    ideas = _items(dest, "ideas.json")
     source_of = {i.get("id", ""): i.get("source", "") for i in ideas if isinstance(i, dict)}
     survivors = [e for e in screened if isinstance(e, dict) and e.get("verdict") in _SURVIVING]
     survivors = survivors[:_UI_CAP]
@@ -122,6 +142,11 @@ def commit_version(processed_dir: str | Path, today_iso: str) -> str:
             shutil.copy2(src, dest / name)
 
     entry = {"id": new_id, "created_at": datetime.now().isoformat(timespec="seconds")}
+    # Record the run_id (from any stage envelope) so studio can join version -> run.
+    ideas_env = _read_json(dest / "ideas.json", None)
+    if isinstance(ideas_env, dict):
+        entry["run_id"] = ideas_env.get("run_id", "")
+        entry["week"] = ideas_env.get("week", "")
     entry.update(_stats(dest))
 
     index = list_versions(processed_dir)

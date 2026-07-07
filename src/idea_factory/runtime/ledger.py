@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from datetime import date, datetime
 from pathlib import Path
 
@@ -154,14 +155,19 @@ def log_impressions_bulk(
         log_impression(data_dir, run_id, week, stage, eid, KILLED, killed_by=reason, ts=ts)
 
 
-def channel_survival_rates(data_dir: str | Path, stage: str | None = None) -> dict[str, dict]:
+def channel_survival_rates(
+    data_dir: str | Path, stage: str | None = None, run_id: str | None = None
+) -> dict[str, dict]:
     """From impressions.jsonl: per (stage,) survived/killed counts and rate.
 
     Returns ``{stage: {"survived": n, "killed": n, "rate": survived/(survived+killed)}}``.
-    Used by the funnel view / ``idea-eval stats``. Pure read, no side effects.
+    ``run_id`` (optional) filters to one run's impressions -- default None keeps
+    the all-runs aggregate the stats view / older callers rely on.
     """
     counts: dict[str, dict[str, int]] = {}
     for rec in read_jsonl(ledger_dir(data_dir) / IMPRESSIONS):
+        if run_id is not None and rec.get("run_id") != run_id:
+            continue
         st = rec.get("stage", "")
         if stage is not None and st != stage:
             continue
@@ -177,17 +183,75 @@ def channel_survival_rates(data_dir: str | Path, stage: str | None = None) -> di
     return out
 
 
-def killed_by_breakdown(data_dir: str | Path, stage: str | None = None) -> dict[str, int]:
-    """Count of kills per ``killed_by`` reason (e.g. 'stale_24m', 'profile_mismatch')."""
+def killed_by_breakdown(
+    data_dir: str | Path, stage: str | None = None, run_id: str | None = None
+) -> dict[str, int]:
+    """Count of kills per ``killed_by`` reason (e.g. 'stale_24m', 'profile_mismatch').
+
+    ``run_id`` (optional) filters to one run -- default None = all-runs aggregate.
+    """
     counts: dict[str, int] = {}
     for rec in read_jsonl(ledger_dir(data_dir) / IMPRESSIONS):
         if rec.get("event") != KILLED:
             continue
         if stage is not None and rec.get("stage") != stage:
             continue
+        if run_id is not None and rec.get("run_id") != run_id:
+            continue
         reason = rec.get("killed_by") or "unknown"
         counts[reason] = counts.get(reason, 0) + 1
     return counts
+
+
+# --- run discovery (for the studio run-centric views) ------------------------
+
+
+def _run_sort_key(run_id: str) -> tuple:
+    """Sort key for ``{kind}-YYYY-MM-DD-N`` ids: by (date, N) so newest is last.
+
+    Falls back to the raw string when the shape is unexpected (still deterministic).
+    """
+    m = re.match(r"^(.*)-(\d{4}-\d{2}-\d{2})-(\d+)$", run_id or "")
+    if m:
+        return (m.group(2), int(m.group(3)), m.group(1))
+    return ("", 0, run_id or "")
+
+
+def list_runs(data_dir: str | Path) -> list[str]:
+    """All distinct run_ids seen in impressions + the traces/ tree, oldest→newest."""
+    ids: set[str] = set()
+    for rec in read_jsonl(ledger_dir(data_dir) / IMPRESSIONS):
+        rid = rec.get("run_id")
+        if isinstance(rid, str) and rid:
+            ids.add(rid)
+    traces_root = ledger_dir(data_dir) / _TRACES_DIRNAME
+    if traces_root.exists():
+        for d in traces_root.iterdir():
+            if d.is_dir():
+                ids.add(d.name)
+    return sorted(ids, key=_run_sort_key)
+
+
+def stages_for_run(data_dir: str | Path, run_id: str) -> list[str]:
+    """Stages this run touched: impression stages + trace file stems, in funnel order."""
+    from idea_factory.contract.stage import STAGES
+
+    seen: set[str] = set()
+    for rec in read_jsonl(ledger_dir(data_dir) / IMPRESSIONS):
+        if rec.get("run_id") == run_id and rec.get("stage"):
+            seen.add(rec["stage"])
+    traces_dir = ledger_dir(data_dir) / _TRACES_DIRNAME / run_id
+    if traces_dir.exists():
+        for f in traces_dir.glob("*.jsonl"):
+            seen.add(f.stem)
+    ordered = [s for s in STAGES if s in seen]
+    ordered += sorted(s for s in seen if s not in STAGES)  # ask/critique/etc appended
+    return ordered
+
+
+def impressions_for_run(data_dir: str | Path, run_id: str) -> list[dict]:
+    """Raw impression rows for one run (stage-drill + lineage joins)."""
+    return [r for r in read_jsonl(ledger_dir(data_dir) / IMPRESSIONS) if r.get("run_id") == run_id]
 
 
 # --- verdicts ----------------------------------------------------------------
@@ -251,8 +315,17 @@ def log_trace(
     response: dict,
     model: str = "",
     ts: str | None = None,
+    usage: dict | None = None,
+    cost: float | None = None,
+    latency_ms: float | None = None,
 ) -> None:
-    """Record one LLM call's prompt+response for the single-idea trace view."""
+    """Record one LLM call's prompt+response for the single-idea trace view.
+
+    ``usage`` ({prompt_tokens, completion_tokens, total_tokens}), ``cost`` (¥, or
+    None when the model has no price), and ``latency_ms`` are optional and null on
+    the offline/mock path -- so the cost-gradient panel is measurable when a real
+    backend runs, without changing anything on the zero-token default path.
+    """
     record = {
         "entity_id": entity_id,
         "prompt_version": prompt_version,
@@ -260,6 +333,9 @@ def log_trace(
         "response": response,
         "model": model,
         "ts": ts,
+        "usage": usage,
+        "cost": cost,
+        "latency_ms": latency_ms,
     }
     _append_jsonl(trace_path(data_dir, run_id, stage), record)
 
