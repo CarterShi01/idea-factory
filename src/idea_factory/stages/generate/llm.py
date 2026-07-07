@@ -130,7 +130,10 @@ def _dedupe_candidates(candidates: list[IdeaCandidate]) -> list[IdeaCandidate]:
     return kept
 
 
-def generate_llm(signals: list[Signal], llm: LLMBackend, config: dict) -> list[IdeaCandidate]:
+def generate_llm(
+    signals: list[Signal], llm: LLMBackend, config: dict,
+    trace_data_dir=None, trace_run_id: str | None = None,
+) -> list[IdeaCandidate]:
     """LLM (A) backend: one batched request per signal, a single complete() call.
 
     Round 3(三源融合护城河,投资人复评 #2 + mission):
@@ -158,8 +161,13 @@ def generate_llm(signals: list[Signal], llm: LLMBackend, config: dict) -> list[I
     fusion_cfg = config.get("fusion") or {}
     fusion_requests = _fusion_requests(clusters, fusion_cfg) if fusion_cfg else []
 
-    responses = llm.complete(per_signal + fusion_requests)
+    all_requests = per_signal + fusion_requests
+    responses = llm.complete(all_requests)
     by_id = {r.id: r for r in responses}
+
+    from idea_factory.runtime.llm import log_trace_batch
+    log_trace_batch(trace_data_dir, trace_run_id, "generate", all_requests, by_id,
+                    config.get("step", "generate"))
 
     candidates: list[IdeaCandidate] = []
     for s in signals:

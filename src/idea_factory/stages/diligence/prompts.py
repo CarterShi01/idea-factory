@@ -57,28 +57,8 @@ def _critique_block(e: Evaluation) -> str:
     return "\n".join(lines)
 
 
-def _log_trace_batch(
-    trace_data_dir,
-    trace_run_id: str | None,
-    stage: str,
-    requests: list,
-    responses: dict,
-    prompt_version: str,
-) -> None:
-    """Best-effort: log every request/response pair in a batch to the ledger's
-    per-run trace (single-idea trace view). No-op unless both
-    ``trace_data_dir``/``trace_run_id`` are given.
-    """
-    if trace_data_dir is None or trace_run_id is None:
-        return
-    from idea_factory.runtime import ledger
+def _log_trace_batch(trace_data_dir, trace_run_id, stage, requests, responses, prompt_version):
+    """Thin alias to the shared runtime helper (kept for critique/judge callers)."""
+    from idea_factory.runtime.llm import log_trace_batch
 
-    for req in requests:
-        r = responses.get(req.id)
-        ledger.log_trace(
-            trace_data_dir, trace_run_id, stage, req.id,
-            prompt_version=prompt_version,
-            request={"system": req.system, "user": req.user},
-            response=(r.to_dict() if r else {}),
-            model=req.model or "",
-        )
+    log_trace_batch(trace_data_dir, trace_run_id, stage, requests, responses, prompt_version)

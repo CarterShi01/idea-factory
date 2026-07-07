@@ -73,13 +73,17 @@ class LLMResponse:
     data: dict | None = None      # parsed JSON when a schema/extractable output is present
     ok: bool = True
     error: str = ""
+    # Observability (null on the offline/mock path -> cost-gradient stays measurable
+    # only when a real backend runs, without touching the zero-token default path).
+    usage: dict | None = None     # {prompt_tokens, completion_tokens, total_tokens}
+    latency_ms: float | None = None
 
     def to_dict(self) -> dict:
         return asdict(self)
 
     @classmethod
     def from_dict(cls, d: dict) -> "LLMResponse":
-        known = {k: d[k] for k in ("id", "text", "data", "ok", "error") if k in d}
+        known = {k: d[k] for k in ("id", "text", "data", "ok", "error", "usage", "latency_ms") if k in d}
         return cls(**known)
 
 
@@ -111,6 +115,112 @@ def extract_json(text: str) -> dict | None:
         except json.JSONDecodeError:
             return None
     return None
+
+
+# --- observability: usage / cost -----------------------------------------
+# Field naming follows the OpenInference semantic conventions
+# (llm.token_count.prompt/completion, llm.cost.total) but kept snake_case here.
+
+
+def _norm_usage(usage: dict | None) -> dict | None:
+    """Normalize an OpenAI-compatible ``usage`` block to our 3-field shape."""
+    if not isinstance(usage, dict):
+        return None
+    pt = usage.get("prompt_tokens")
+    ct = usage.get("completion_tokens")
+    tt = usage.get("total_tokens")
+    if pt is None and ct is None and tt is None:
+        return None
+    if tt is None and (pt is not None or ct is not None):
+        tt = (pt or 0) + (ct or 0)
+    return {"prompt_tokens": pt, "completion_tokens": ct, "total_tokens": tt}
+
+
+def _dify_usage(meta: dict | None) -> dict | None:
+    """Map a Dify workflow ``data`` block to our usage shape (best-effort)."""
+    if not isinstance(meta, dict):
+        return None
+    tt = meta.get("total_tokens")
+    if tt is None:
+        return None
+    return {"prompt_tokens": None, "completion_tokens": None, "total_tokens": tt}
+
+
+_PRICES_CACHE: dict | None = None
+
+
+def _load_prices() -> dict:
+    """config/llm/prices.json (founder-filled, like founder.json). Missing -> {}.
+
+    Cached per process; best-effort (a bad/absent file just means cost stays null).
+    """
+    global _PRICES_CACHE
+    if _PRICES_CACHE is None:
+        default_dir = Path(os.environ.get("IDEA_LLM_CONFIG_DIR", "config/llm"))
+        try:
+            _PRICES_CACHE = json.loads((default_dir / "prices.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            _PRICES_CACHE = {}
+    return _PRICES_CACHE if isinstance(_PRICES_CACHE, dict) else {}
+
+
+def price_for(model: str) -> dict | None:
+    """Per-model price ``{input_per_1k, output_per_1k}`` or None if unpriced."""
+    p = _load_prices().get(model)
+    return p if isinstance(p, dict) else None
+
+
+def log_trace_batch(
+    trace_data_dir,
+    trace_run_id: str | None,
+    stage: str,
+    requests: list,
+    responses: dict,
+    prompt_version: str,
+) -> None:
+    """Log every request/response in a batch to the ledger trace, with usage/cost/
+    latency. Shared by all LLM steps (diligence critique/judge, generate, persona,
+    ask). No-op unless both ``trace_data_dir``/``trace_run_id`` are given -- so the
+    offline default path (no real backend, no complete()) writes nothing.
+    """
+    if trace_data_dir is None or trace_run_id is None:
+        return
+    from idea_factory.runtime import ledger
+
+    for req in requests:
+        r = responses.get(req.id)
+        model = (r.model if r and hasattr(r, "model") else None) or req.model or ""
+        usage = r.usage if r else None
+        ledger.log_trace(
+            trace_data_dir, trace_run_id, stage, req.id,
+            prompt_version=prompt_version,
+            request={"system": req.system, "user": req.user},
+            response=(r.to_dict() if r else {}),
+            model=model,
+            usage=usage,
+            cost=cost_of(model, usage) if r else None,
+            latency_ms=(r.latency_ms if r else None),
+        )
+
+
+def cost_of(model: str, usage: dict | None) -> float | None:
+    """¥ cost of one call from its usage + the price table; None when unknown.
+
+    Computed at log time so historical trace rows stay self-describing even if
+    prices change later. Missing model / missing tokens -> None (not 0).
+    """
+    price = price_for(model)
+    if not price or not isinstance(usage, dict):
+        return None
+    pt, ct = usage.get("prompt_tokens"), usage.get("completion_tokens")
+    inp = price.get("input_per_1k", 0.0)
+    outp = price.get("output_per_1k", 0.0)
+    if pt is None and ct is None:
+        tt = usage.get("total_tokens")
+        if tt is None:
+            return None
+        return round(tt / 1000 * max(inp, outp), 6)  # no split -> upper-bound estimate
+    return round((pt or 0) / 1000 * inp + (ct or 0) / 1000 * outp, 6)
 
 
 # --- L1: backends ---------------------------------------------------------
@@ -223,7 +333,7 @@ class RouterBackend:
         )
         with urllib.request.urlopen(req, timeout=self.timeout) as resp:  # noqa: S310 (trusted, configured URL)
             data = json.loads(resp.read().decode("utf-8"))
-        return data["choices"][0]["message"]["content"]
+        return data["choices"][0]["message"]["content"], data.get("usage")
 
     def complete(self, requests: list[LLMRequest], retries: int = 2) -> list[LLMResponse]:
         out: list[LLMResponse] = []
@@ -234,9 +344,14 @@ class RouterBackend:
             last = ""
             for attempt in range(retries + 1):
                 try:
-                    text = self._chat(r.system, r.user, r.temperature, model)
+                    t0 = time.perf_counter()
+                    text, usage = self._chat(r.system, r.user, r.temperature, model)
+                    latency_ms = round((time.perf_counter() - t0) * 1000, 1)
                     data = extract_json(text) if r.schema else None
-                    out.append(LLMResponse(id=r.id, text=text, data=data, ok=True))
+                    out.append(LLMResponse(
+                        id=r.id, text=text, data=data, ok=True,
+                        usage=_norm_usage(usage), latency_ms=latency_ms,
+                    ))
                     last = ""
                     break
                 except Exception as exc:  # noqa: BLE001 -- one bad call shouldn't kill the batch
@@ -353,14 +468,16 @@ class DifyBackend:
         )
         with urllib.request.urlopen(http_req, timeout=self.timeout) as resp:  # noqa: S310 (configured URL)
             body = json.loads(resp.read().decode("utf-8"))
-        outputs = (body.get("data") or {}).get("outputs") or {}
+        meta = body.get("data") or {}
+        outputs = meta.get("outputs") or {}
         if self.output_key in outputs:
             val = outputs[self.output_key]
         elif outputs:
             val = next(iter(outputs.values()))
         else:
             val = ""
-        return val if isinstance(val, str) else json.dumps(val, ensure_ascii=False)
+        text = val if isinstance(val, str) else json.dumps(val, ensure_ascii=False)
+        return text, meta
 
     def complete(self, requests: list[LLMRequest], retries: int = 2) -> list[LLMResponse]:
         if not self.api_key:
@@ -373,9 +490,14 @@ class DifyBackend:
             last = ""
             for attempt in range(retries + 1):
                 try:
-                    text = self._run(r)
+                    t0 = time.perf_counter()
+                    text, meta = self._run(r)
+                    latency_ms = round((time.perf_counter() - t0) * 1000, 1)
                     data = extract_json(text) if r.schema else None
-                    out.append(LLMResponse(id=r.id, text=text, data=data, ok=True))
+                    out.append(LLMResponse(
+                        id=r.id, text=text, data=data, ok=True,
+                        usage=_dify_usage(meta), latency_ms=latency_ms,
+                    ))
                     last = ""
                     break
                 except Exception as exc:  # noqa: BLE001 -- one bad call shouldn't kill the batch

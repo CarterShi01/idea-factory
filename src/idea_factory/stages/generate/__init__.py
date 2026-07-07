@@ -40,7 +40,10 @@ def run(ctx: StageContext) -> StageResult:
     if backend is None or ctx.generate_backend_name == "rule":
         candidates = rule.generate(signals)
     else:
-        candidates = llm_mod.generate_llm(signals, backend, load_step_config("generate"))
+        candidates = llm_mod.generate_llm(
+            signals, backend, load_step_config("generate"),
+            trace_data_dir=ctx.data_dir, trace_run_id=ctx.run_id,
+        )
 
     entered = len(candidates)
     candidates, killed = _screen_anti_fit(candidates)

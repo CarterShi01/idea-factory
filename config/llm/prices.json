@@ -1,0 +1,4 @@
+{
+  "_doc": "每模型价格表(创始人填,似 founder.json 是你自己的数据)。单位: 人民币元/1000 token。cost 在写 trace 行时算好存入,历史行自描述。★未列出的模型 → trace 的 cost=null(前端显示『未计价』,不假装 0)。填法: 加一个 \"<模型名>\": {\"input_per_1k\": x, \"output_per_1k\": y};模型名 = router 实际用的名(如 LKEAP 的 tc-code/tc-think)。runtime.llm.price_for/cost_of 读本文件,改这里即改成本口径,不动代码。",
+  "_example": {"tc-code": {"input_per_1k": 0.002, "output_per_1k": 0.008}}
+}
