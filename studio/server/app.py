@@ -36,7 +36,9 @@ import sys
 sys.path.insert(0, str(REPO_ROOT / "src"))
 from idea_factory import pipeline  # noqa: E402
 from idea_factory.runtime import ledger, versioning  # noqa: E402
-from idea_factory.runtime.llm import get_backend, load_dotenv, load_step_config  # noqa: E402
+from idea_factory.runtime.llm import (  # noqa: E402
+    build_request, get_backend, load_dotenv, load_step_config, render_template,
+)
 from idea_factory.stages.diligence import gate as diligence_gate  # noqa: E402
 from idea_factory.stages.diligence import judge as diligence_judge  # noqa: E402
 from idea_factory.stages.recall.collect import collect_all  # noqa: E402
@@ -633,6 +635,81 @@ def do_whatif_judge(body: dict) -> dict:
     }
 
 
+# --- interactive ask (Studio v2 real-time follow-up) ----------------------
+# Free-text Q&A grounded in ONE idea's full lineage. router (Tencent) for a real
+# answer, mock fallback when router isn't configured. cc/dify excluded (cc pauses
+# for a human = not real-time; dify unnecessary). Every turn is logged to the
+# trace tree (stage="ask") so the follow-up dialogue is itself part of the record.
+_ASK_BACKENDS = ("router", "mock")
+
+
+def _idea_context(run_id: str, idea_id: str) -> str:
+    """Compact, LLM-readable dump of an idea's cross-stage lineage for the ask prompt."""
+    lin = idea_lineage(run_id, idea_id)
+    sig = lin.get("signal") or {}
+    cand = lin.get("candidate") or {}
+    rank = lin.get("rank") or {}
+    enr = lin.get("enrich") or {}
+    dil = lin.get("diligence") or {}
+    lines = [
+        f"标题: {cand.get('title', '')}",
+        f"痛点: {cand.get('pain', '')}",
+        f"方案: {cand.get('solution', '')}",
+        f"目标用户: {cand.get('target_user', '')}",
+        f"来源信号: [{sig.get('source_name', sig.get('source', ''))}] {sig.get('title', '')}"
+        f"（{sig.get('observed_on', '')}）原文: {sig.get('raw_text', '')[:400]}",
+        f"生成侧因子分: {json.dumps(rank.get('factors') or {}, ensure_ascii=False)}  alpha={rank.get('alpha')}",
+        f"证据门: {json.dumps(enr.get('gate') or {}, ensure_ascii=False)}  证据条数={len(enr.get('evidence') or [])}",
+        f"裁决: {dil.get('verdict', '(未裁决)')}  分数={dil.get('eval_score')}  "
+        f"最致命质疑={dil.get('killer_objection', '')}  最危险假设={dil.get('riskiest_assumption', '')}",
+    ]
+    reasons = dil.get("judge_reasons") or []
+    if reasons:
+        lines.append("裁决理由: " + " / ".join(r.get("claim", "") for r in reasons))
+    return "\n".join(lines)
+
+
+def do_ask(body: dict) -> dict:
+    """Answer a founder's free-text question about one idea, grounded in its lineage.
+
+    Persists the turn to traces/<run_id>/ask.jsonl (unlike whatif-judge, which is
+    ephemeral) so the interactive dialogue becomes part of the debuggable record.
+    """
+    run_id = (body.get("run_id") or "").strip()
+    idea_id = (body.get("idea_id") or "").strip()
+    question = (body.get("question") or "").strip()
+    backend_name = body.get("backend", "router")
+    if not run_id or not idea_id or not question:
+        raise ValueError("run_id, idea_id and question are required")
+    if backend_name not in _ASK_BACKENDS:
+        raise ValueError(f"backend must be one of {_ASK_BACKENDS} (cc/dify not allowed for interactive ask)")
+
+    context = _idea_context(run_id, idea_id)
+    config = load_step_config("ask")
+    user = render_template(config.get("user_template", ""), {"idea_context": context, "question": question})
+    req = build_request(idea_id, user, config)
+
+    from idea_factory.runtime.llm import log_trace_batch
+
+    used = backend_name
+    try:
+        resp = get_backend(backend_name).complete([req])[0]
+        if not resp.ok and backend_name == "router":
+            used = "mock"
+            resp = get_backend("mock").complete([req])[0]
+    except Exception:  # noqa: BLE001 — router misconfigured/unreachable → mock fallback
+        used = "mock"
+        resp = get_backend("mock").complete([req])[0]
+
+    log_trace_batch(DATA_DIR, run_id, "ask", [req], {req.id: resp}, config.get("step", "ask"))
+    return {
+        "idea_id": idea_id, "run_id": run_id, "question": question,
+        "answer": resp.text or ("(mock 后端无内容——配置 router 端点后可得真实回答)" if used == "mock" else ""),
+        "backend": used, "usage": resp.usage, "latency_ms": resp.latency_ms,
+        "ts": ledger.now_iso(),
+    }
+
+
 # --- HTTP handler ---------------------------------------------------------
 
 _MIME = {
@@ -739,6 +816,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(do_whatif_judge(body))
             if path == "/api/run/stage":
                 return self._json(do_rerun_stage(body))
+            if path == "/api/ask":
+                return self._json(do_ask(body))
         except ValueError as exc:  # bad input (missing field, unknown idea/backend) → 400
             return self._json({"error": str(exc)}, 400)
         except Exception as exc:  # noqa: BLE001 — surface run errors to the UI

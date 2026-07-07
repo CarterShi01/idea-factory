@@ -164,3 +164,34 @@ def test_stage_drill_unknown_stage_errors(server):
     rid = runs[0]["run_id"]
     status, _ = _get(f"{base}/api/run/{rid}/stage/nonsense")
     assert status in (400, 500)  # ValueError surfaced
+
+
+def test_ask_falls_back_to_mock_and_logs_trace(server):
+    base, app, data_dir, _ = server
+    from idea_factory.runtime import ledger
+
+    _, runs = _get(f"{base}/api/runs")
+    rid = runs[0]["run_id"]
+    idea_id = _get(f"{base}/api/run/{rid}/stage/diligence")[1]["items"][0]["id"]
+
+    # router isn't configured in tests -> handler falls back to mock, still returns 200
+    status, res = _post(f"{base}/api/ask", {
+        "run_id": rid, "idea_id": idea_id, "question": "为什么这条是这个裁决?", "backend": "router",
+    })
+    assert status == 200
+    assert res["backend"] == "mock"          # graceful fallback surfaced
+    assert res["idea_id"] == idea_id
+
+    # the turn was persisted to the ask trace (interactive dialogue is part of the record)
+    trace = ledger.read_trace(data_dir, rid, "ask")
+    assert len(trace) == 1
+    assert trace[0]["entity_id"] == idea_id
+    assert "为什么这条是这个裁决" in trace[0]["request"]["user"]  # question + context in prompt
+
+
+def test_ask_requires_fields(server):
+    base, *_ = server
+    _, runs = _get(f"{base}/api/runs")
+    rid = runs[0]["run_id"]
+    status, _ = _post(f"{base}/api/ask", {"run_id": rid, "idea_id": "x"})  # no question
+    assert status == 400
