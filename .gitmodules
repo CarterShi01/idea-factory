@@ -1,0 +1,3 @@
+[submodule "reference/mirrors/fast-map-dpp"]
+	path = reference/mirrors/fast-map-dpp
+	url = https://github.com/laming-chen/fast-map-dpp

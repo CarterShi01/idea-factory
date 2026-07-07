@@ -1,0 +1,304 @@
+# reference/sources.yaml — 开源参考源注册表(唯一真相源;CI: tests/test_reference_registry.py)
+#
+# 每源一条:
+#   id         = reference/mirrors/<id>/ 镜像目录名 = miners/<id>.md 沉淀文档名 = provenance 外键
+#   repository = 上游仓(github.com/<org>/<repo>)
+#   ref        = 镜像钉定的 commit(sync-source.sh --add/刷新时回写;未建镜像时缺省)
+#   license    = SPDX 或说明;⚠️ "Other" 必须人工读过 LICENSE 原文才登记
+#   lanes      = 产出落哪个模块:八段名 | llm-infra | observability(一源可多 lane)
+#   status     = adopt(资产可直接裁剪吸收) | concepts-borrow(只借概念/公式) | watch(定期回看)
+#   mirror     = false ⇒ license 禁区(AGPL/NC/RAIL 等):禁止镜像代码,只读文档/公式重新表述
+#   mined_for  = d: 数据面(prompt/schema/字段/参数→有门 promote) · m: 机制面(算法/范式→只提案)
+#   pin        = true ⇒ 必须钉 commit 消费(反爬对抗/prompt 快迭代/停更自养)
+#   note       = 挖什么要点 + 坑;细节以 docs/research/reference-scan/L*.md 为准
+#
+# skip/reject 负面清单(防重爬)住 docs/research/reference-scan/00-summary.md §3,不在这里。
+# 纪律见 reference/README.md;新增源三步:注册一行 → sync-source.sh --add → miners/<id>.md。
+
+sources:
+  # ============ 算法/纯函数可抄(adopt;抄入仍需创始人逐个点头) ============
+  - id: fast-map-dpp
+    repository: github.com/laming-chen/fast-map-dpp
+    ref: 6ab745c
+    license: Apache-2.0
+    lanes: [rank, portfolio]
+    status: adopt
+    mined_for: {m: "greedy MAP-DPP 纯函数(dpp.py 全文 ~60 行,numpy→stdlib 手工移植);可统一 rank/select 与 portfolio/diversify 的多段启发式为单一可调目标"}
+    pin: true
+    note: "冻结仓,钉最终 commit 一劳永逸。见 L4/L7。"
+
+  - id: json-repair
+    repository: github.com/mangiucugna/json_repair
+    license: MIT
+    lanes: [llm-infra]
+    status: adopt
+    mined_for: {m: "容错 JSON 解析 + schema 引导修复(~200–400 行)→ 候选 runtime/jsonfix.py;补 extract_json 正则失手即整条报废的痛点"}
+    pin: true
+    note: "零依赖纯 Python。见 L9;机制提案②(结构化输出三层闭环)的一环。"
+
+  - id: simhash-1e0ng
+    repository: github.com/1e0ng/simhash
+    license: MIT
+    lanes: [triage]
+    status: adopt
+    mined_for: {m: "SimhashIndex 分块索引(~200 行)——跨周 seen 库的增量近重查询,替代全量两两比对"}
+    pin: true
+    note: "单作者停更,抄入自养。见 L2。"
+
+  - id: hf-datatrove
+    repository: github.com/huggingface/datatrove
+    license: Apache-2.0
+    lanes: [triage]
+    status: concepts-borrow
+    mined_for: {d: "MinHash 默认参数(14×8,阈值≈0.72)→ funnel.json triage 节", m: "四阶段 dedup 管线(signature→bucket→cluster→filter,与我们每段落盘工件同构)"}
+    pin: true
+    note: "只挖 minhash 相关目录,别碰其重型执行器。见 L2。"
+
+  - id: ekzhu-datasketch
+    repository: github.com/ekzhu/datasketch
+    license: MIT
+    lanes: [triage]
+    status: concepts-borrow
+    mined_for: {m: "_optimal_param 阈值→(b,r) 推导函数(scipy 积分换 stdlib 数值积分)"}
+    pin: true
+    note: "⚠️ v2.0.0 换了置换方案,跨版本指纹不可比——钉 commit 后 diff 追踪。见 L2。"
+
+  # ============ prompt/schema 资产(adopt) ============
+  - id: promptfoo
+    repository: github.com/promptfoo/promptfoo
+    license: MIT
+    lanes: [diligence]
+    status: adopt
+    mined_for: {d: "src/prompts/grading.ts 全部工业级评审 prompt(枚举裁决/agentic 取证/防注入)+ G-Eval 两条 → config/llm/critique,judge.json(⚠️ dify/flows 镜像同步)"}
+    pin: true
+    note: "OpenAI evals 官方迁移目的地;被 OpenAI 收购,路线可能漂移故必钉。见 L6。"
+
+  - id: deepeval
+    repository: github.com/confident-ai/deepeval
+    license: Apache-2.0
+    lanes: [diligence]
+    status: adopt
+    mined_for: {d: "g_eval/template.py 两段式模板(固定 evaluation_steps 提高 judge 重跑一致性)", m: "DAG 决策树评审(便宜二值判定在前、贵评分在分支,与 gate→judge 同构)"}
+    pin: true
+    note: "见 L6;机制提案③(judge 评分锚定+枚举裁决)主要来源。"
+
+  - id: gpt-researcher
+    repository: github.com/assafelovic/gpt-researcher
+    license: Apache-2.0
+    lanes: [enrich]
+    status: adopt
+    mined_for: {d: "gpt_researcher/prompts.py(curate_sources 明文'优先含数字来源',与证据门天然对齐)", m: "scraper 多后端注册表(与 recall/channels 同构)+ per-step 模型分配"}
+    pin: true
+    note: "deep-research 事实标准。见 L5。"
+
+  - id: crawl4ai
+    repository: github.com/unclecode/crawl4ai
+    license: Apache-2.0
+    lanes: [enrich]
+    status: adopt
+    mined_for: {d: "crawl4ai/prompts.py(schema 抽取/内容过滤)", m: "两步 schema 抽取范式:LLM 对页面模板只花一次钱生成抽取 schema,之后纯代码确定性抽取——全场唯一与成本梯度同构的现成设计;pruning/BM25 过滤纯函数"}
+    pin: true
+    note: "0.x API 破坏性变更频繁,必钉。见 L5;evidence_structuring 步骤的骨架来源。"
+
+  - id: noviscl-ai-researcher
+    repository: github.com/NoviScl/AI-Researcher
+    license: MIT
+    lanes: [generate]
+    status: adopt
+    mined_for: {d: "grounded_idea_gen.py prompt 骨架 + filter/novelty prompt", m: "批内防重护栏 + n-gram 去重纯函数;pairwise>直接打分的结论借给 diligence"}
+    pin: true
+    note: "斯坦福 79 人盲评论文官方仓,冻结。见 L3。"
+
+  - id: chats-lab-verbalized-sampling
+    repository: github.com/CHATS-lab/verbalized-sampling
+    license: Apache-2.0
+    lanes: [generate]
+    status: adopt
+    mined_for: {d: "VS 官方 prompt 措辞 + k/tau 默认参数(我们在用的 VS 方法的上游权威源)"}
+    pin: false
+    note: "持续跟踪方法演进。见 L3。"
+
+  - id: jobspy
+    repository: github.com/speedyapply/JobSpy
+    license: MIT
+    lanes: [recall]
+    status: adopt
+    mined_for: {d: "JobPost schema(salary 三元组=付薪强度)→ jobs.jsonl 字段规范", m: "per-site scraper 结构 + salary/date 归一化纯函数"}
+    pin: true
+    note: "反爬对抗型,必钉。见 L1。"
+
+  - id: google-play-scraper
+    repository: github.com/JoMingyu/google-play-scraper
+    license: MIT
+    lanes: [recall]
+    status: adopt
+    mined_for: {d: "reviews 字段规范(score 支持 1–3 星筛选)→ reviews.jsonl", m: "零依赖请求构造 + continuation 分页可抄成 stdlib 纯函数"}
+    pin: true
+    note: "2024-06 停更,钉 commit 自担维护。见 L1。"
+
+  - id: langfuse
+    repository: github.com/langfuse/langfuse
+    license: MIT
+    lanes: [observability]
+    status: adopt
+    mined_for: {d: "Score/ScoreConfig/annotation-queue schema 逐字段映射 verdicts.jsonl;source 枚举(API|EVAL|ANNOTATION)升级'操作即标签'"}
+    pin: true
+    note: "⚠️ ee/ 目录商业 license——挖矿必须路径过滤,只碰 MIT 部分。见 L10;机制提案⑤来源。"
+
+  # ============ 概念/模式借鉴(concepts-borrow) ============
+  - id: twitter-the-algorithm
+    repository: github.com/twitter/the-algorithm
+    license: AGPL-3.0
+    lanes: [rank]
+    status: concepts-borrow
+    mirror: false
+    mined_for: {m: "乘性位置衰减打散公式 + 负权重融合 + scaling-scorer 组件栈(founder_fit 的生产级先例)——只读概念,自写实现"}
+    pin: true
+    note: "⚠️ AGPL:一行代码不能抄。经社区注解仓(igorbrigadir/awesome-twitter-algo)读概念。见 L4。"
+
+  - id: microsoft-qlib
+    repository: github.com/microsoft/qlib
+    license: MIT
+    lanes: [rank]
+    status: concepts-borrow
+    mined_for: {m: "因子=声明式表达式+算子单一真相源(ops.py/Alpha158 组织方式)——factors/ 防漂移工程的参照"}
+    pin: false
+    note: "只挖因子组织方式,别碰其数据/训练栈。见 L4。"
+
+  - id: instructor
+    repository: github.com/567-labs/instructor
+    license: MIT
+    lanes: [llm-infra]
+    status: concepts-borrow
+    mined_for: {m: "reask 闭环(core/retry.py:把校验错误喂回下一轮)+ Mode 分层 + 异常分类"}
+    pin: true
+    note: "v1.9–1.10 大重构过,钉 commit。见 L9;机制提案②的一环。"
+
+  - id: litellm
+    repository: github.com/BerriAI/litellm
+    license: MIT
+    lanes: [llm-infra]
+    status: concepts-borrow
+    mined_for: {d: "model_prices_and_context_window.json → 候选 config/llm/prices.json(trace 记 cost 的价格表)", m: "错误分类 RetryPolicy + 冷却 + fallback 链(⚠️ 我们的降级方向必须贵→便宜,与其相反)"}
+    pin: true
+    note: "⚠️ enterprise/ 目录商业条款,绕开。见 L9/L10;机制提案①的价格数据源。"
+
+  - id: fatebook
+    repository: github.com/Sage-Future/fatebook
+    license: MIT
+    lanes: [retro]
+    status: concepts-borrow
+    mined_for: {m: "Brier/相对 Brier/校准图分桶(lib/_scoring.ts)+ resolve 三态生命周期(YES/NO/AMBIGUOUS + 到期提醒)"}
+    pin: false
+    note: "见 L8;机制提案④(outcomes 三态)来源。"
+
+  - id: uncertainty-toolbox
+    repository: github.com/uncertainty-toolbox/uncertainty-toolbox
+    license: MIT
+    lanes: [retro]
+    status: concepts-borrow
+    mined_for: {m: "miscalibration area + adversarial group calibration(按 persona/channel 切片校准)+ interval score"}
+    pin: true
+    note: "活跃度放缓,当冻结公式书用。见 L8。"
+
+  - id: dvclive
+    repository: github.com/iterative/dvclive
+    license: Apache-2.0
+    lanes: [retro]
+    status: concepts-borrow
+    mined_for: {m: "文件即真相目录约定(summary json + append-only tsv + params 快照)——与我们 ledger/versioning 互证"}
+    pin: false
+    note: "见 L8。"
+
+  - id: trafilatura
+    repository: github.com/adbar/trafilatura
+    license: Apache-2.0
+    lanes: [enrich]
+    status: concepts-borrow
+    mined_for: {m: "正文抽取启发式 + 姊妹仓 htmldate 日期提取启发式(直接服务 24 个月红线)——先抄启发式为纯函数;live 获批时升级为依赖申请"}
+    pin: true
+    note: "⚠️ 只看 ≥v1.8(更早版本 GPL)。见 L5;待拍板事项 1。"
+
+  - id: verdict
+    repository: github.com/haizelabs/verdict
+    license: MIT
+    lanes: [diligence]
+    status: concepts-borrow
+    mined_for: {m: "judge 原语分类学(whitepaper)+ 边界样本加验证层的裁剪思路"}
+    pin: true
+    note: "活跃度存疑,钉 commit。见 L6。"
+
+  - id: sakana-ai-scientist
+    repository: github.com/SakanaAI/AI-Scientist
+    license: RAIL-derived
+    lanes: [generate]
+    status: concepts-borrow
+    mirror: false
+    mined_for: {m: "反思早停回路 + 想法存档防重(零额外调用)+ 新颖性判决字符串由代码解析——只读论文/文档,概念级重写"}
+    pin: true
+    note: "⚠️ 非标 RAIL 系 license:不镜像代码。见 L3。"
+
+  - id: git-cliff
+    repository: github.com/orhun/git-cliff
+    license: MIT OR Apache-2.0
+    lanes: [portfolio]
+    status: concepts-borrow
+    mined_for: {d: "examples/*.toml 渐进配置样板(statistics.toml=漏斗指标附录范例)", m: "分组规则+模板全进配置、生成器零业务逻辑——weekly_report 配置化方向"}
+    pin: false
+    note: "见 L7。"
+
+  - id: horizon
+    repository: github.com/Thysrael/Horizon
+    license: MIT
+    lanes: [portfolio]
+    status: concepts-borrow
+    mined_for: {d: "中英双语简报 markdown 结构 + 渠道配置 schema", m: "多渠道投递抽象"}
+    pin: true
+    note: "⚠️ 其 LLM 排序部分是成本梯度反例,只挖输出侧;单作者业余维护。见 L7。"
+
+  - id: changedetection-io
+    repository: github.com/dgtlmoon/changedetection.io
+    license: Apache-2.0
+    lanes: [recall]
+    status: concepts-borrow
+    mined_for: {m: "抓取→过滤→diff→trigger 的事件化判定逻辑 + restock/价格 processor(lxml 换 stdlib 重写)"}
+    pin: false
+    note: "见 L1。"
+
+  - id: media-crawler
+    repository: github.com/NanmiCoder/MediaCrawler
+    license: NC-custom
+    lanes: [recall]
+    status: concepts-borrow
+    mirror: false
+    mined_for: {m: "CDP 挂已登录浏览器合规抓取模式 + 每平台一目录 adapter 结构 + 中文平台靶点清单——只读设计,自写实现(vps_browser 已同构)"}
+    pin: false
+    note: "⚠️ 非商用 license:一行代码不能进仓。见 L1;待拍板事项 4(合规)。"
+
+  - id: openinference
+    repository: github.com/Arize-ai/openinference
+    license: Apache-2.0
+    lanes: [observability]
+    status: concepts-borrow
+    mined_for: {d: "spec/semantic_conventions.md 字段命名(llm.token_count.*/llm.cost.*/span kind)→ traces.jsonl 补字段的命名依据"}
+    pin: true
+    note: "见 L10;机制提案①(trace 记 token/cost,成本梯度可观测)的字段来源。"
+
+  - id: label-studio
+    repository: github.com/HumanSignal/label-studio
+    license: Apache-2.0
+    lanes: [observability]
+    status: concepts-borrow
+    mined_for: {d: "annotation 元数据字段(lead_time/was_cancelled/ground_truth)", m: "predictions/annotations 二元结构——系统预测 vs 人工纠正 = 免费校准数据"}
+    pin: false
+    note: "见 L10;机制提案⑤的字段来源。"
+
+  # ============ watch(暂不挖,定期回看) ============
+  - id: otel-genai-semconv
+    repository: github.com/open-telemetry/semantic-conventions
+    license: Apache-2.0
+    lanes: [observability]
+    status: watch
+    mined_for: {d: "GenAI 语义约定 stable 后,评估从 OpenInference 迁移 trace 字段命名"}
+    pin: false
+    note: "Development 状态零 release;stable 前不动。见 L10。"

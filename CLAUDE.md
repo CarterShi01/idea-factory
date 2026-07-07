@@ -62,8 +62,9 @@ idea run:  recall → triage → generate → rank → enrich → diligence → 
 | `data/processed/` | 阶段工件 + 报告 + versions/ — never hand-edit; regenerate via `idea run` |
 | `data/ledger/` | impressions/verdicts/outcomes 三张日志 + traces/(常开) |
 | `studio/` | WebUI(server 读工件与 ledger;/api/run 映射段区间) |
-| `docs/research/` | 设计与调研(do not delete);`reference-scan/` 是开源参考调研 |
-| `tests/` | 测试套件;`test_stage_isolation.py` 钉死分层铁律,`test_dify_mirror_invariant.py` 钉死 prompt 镜像 |
+| `docs/research/` | 设计与调研(do not delete);`reference-scan/` 是开源参考调研(00-summary §3 = skip 负面清单,防重爬) |
+| `reference/` | ★开源参考源(只挖不跑):`sources.yaml` 注册表 + `mirrors/`(submodule 钉 commit)+ `miners/<id>.md`(per-source 挖矿沉淀)+ `sync-source.sh`。纪律见其 README;挖矿用 `/mine-reference <id>`;**永不运行镜像代码、永不自动跟随上游、promote 一律 HITL** |
+| `tests/` | 测试套件;`test_stage_isolation.py` 钉死分层铁律,`test_dify_mirror_invariant.py` 钉死 prompt 镜像,`test_reference_registry.py` 钉死参考源注册表 |
 
 **Isolation rule(分层铁律,CI 强制)**:`contract ← runtime ← factors ← stages
 ← pipeline ← cli` 只许向下依赖;**八段兄弟互不 import**,只能 import
