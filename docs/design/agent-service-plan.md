@@ -1,8 +1,18 @@
 # Agent 服务化改造计划 — idea-factory 作为 oc 的"投研部"
 
-> 状态:创始人与 CC 讨论定稿的施工蓝图(2026-07-08)。
+> 状态:创始人与 CC 讨论定稿的施工蓝图(2026-07-08),M-A/M-B/M-C(可完成部分)
+> 已实施并合入 master(commit bc295b8)。剩下唯一的卡点见下。
 > 上游文档:`pipeline-v2-plan.md`(八段漏斗,本文假定其已落地,见其 §9.6/9.7)。
 > 本文回答:idea-factory 如何成为被 oc(one-creator)直接调用的总 Agent。
+
+> **TODO(founder)——全局唯一剩下的卡点**:vps_browser 目标站点清单。
+> 给一份"钱在流动"三源(招聘/成交/差评,如 BOSS直聘/闲鱼成交页/竞品评论页)的
+> 目标站点(name/category/url/item_selector/title_selector,格式抄
+> `config/sources.json` 里 `vps_browser` 段现成的 6 个例子)+ 合规判断,填进
+> 对应段的 `targets` 数组即接通(机制已验证跑通,不用改代码)。已在
+> `config/sources.json` 顶部和 jobs/marketplace/reviews 三段各留了
+> `TODO(founder)` 标记。给到后顺手评估 C2(enrich 三个证据 fetcher 的 live
+> 接线,见 §3 M-C C2 票)。详见 §5。
 
 ## §0 定位与边界(创始人已认可,钉死)
 
