@@ -1,13 +1,26 @@
-# Idea Factory Studio
+# Idea Factory Studio — 可调试控制台（Studio v2）
 
 A web control panel for the idea-factory engine — front/back separated, TS frontend.
+**运行为轴的调试台**:每一步挖到了什么、为什么被杀、能否重跑、能否实时追问,全部
+可视可查。八段工件模型天生适合可调试(每段边界落盘、run_id 串全链),Studio 把这些
+数据接出来重组成一个调试面。
 
-- **Frontend** (`web/`): Vite + React + **TypeScript** SPA. A dense "quant terminal"
-  dashboard: Overview (pipeline + stats), Ideas (ranked candidates + factor bars),
-  Decisions (verdicts, killer objections, RAT experiments), Signals, Run pipeline.
-- **Backend** (`server/app.py`): **stdlib-only** Python (zero deps). Imports the
-  kernel in-process, serves the built SPA + a small JSON API, gated by a single
-  shared password (nginx does not auth). Listens on `127.0.0.1:3010`.
+- **Frontend** (`web/`): Vite + React + **TypeScript** SPA(零运行时依赖,单 CSS 文件,
+  暗色 quant-terminal 主题)。信息架构 = **运行选择器 → 漏斗首页 → 段钻取 → 单 idea
+  全链路血统**,hash 路由深链可书签(`#/run/:id/idea/:x`):
+  - **漏斗首页**(RunFunnel):一个 run 的八段 进→存活·杀·存活率条 + 杀因 chip。
+  - **段钻取**(StageDrill):某段处理了哪些条目、每条为什么被杀 + 单段重跑(破坏性)。
+  - **单 idea 血统**(IdeaLineage):信号原文→候选→因子/alpha→证据门→裁决的纵向时间线;
+    每 LLM 步展开看 **prompt+response+token/cost/latency**;星标/杀标签、what-if 重跑评审、
+    **实时追问**(就这条 idea 自由提问)都在这里。
+- **Backend** (`server/app.py`): **stdlib-only** Python(zero deps)。Imports the
+  kernel in-process, serves the built SPA + a JSON API, gated by a single shared
+  password (nginx does not auth). Listens on `127.0.0.1:3010`.
+
+> 成本梯度可度量:LLM 段的 trace 现在记 token/cost/latency(见根目录 `config/llm/prices.json`
+> ——**创始人自己填每模型单价**,似 founder.json;未填 → 前端显示「未计价」不假装 0)。
+> 便宜段(generate)每条 ~百 token、昂贵段(diligence)每条数千 token,沿漏斗单调递增
+> 一眼可见。
 
 ## Develop
 
@@ -28,18 +41,29 @@ STUDIO_PASSWORD='a-strong-password' python3 studio/server/app.py   # serves dist
 
 ## API
 
+**运行为轴的观测端点(Studio v2):**
+
 | Method | Path | Purpose |
 |--------|------|---------|
-| GET  | `/api/me` | auth status |
-| POST | `/api/login` `{password}` | sets signed-cookie session |
-| POST | `/api/logout` | clears session |
-| GET  | `/api/overview` | counts, verdicts, factor names, last-run times |
-| GET  | `/api/ideas` | ranked candidates (`ideas.json`) |
-| GET  | `/api/decisions` | screened evaluations (`screened.json`) |
-| GET  | `/api/signals` | normalized 3-source signals |
-| POST | `/api/run/generate` `{backend,sources,top_n}` | run idea-gen |
-| POST | `/api/run/evaluate` `{backend,floor,top_n}` | run idea-eval |
-| GET  | `/api/top3` | **machine endpoint** — today's top-3 non-killed ideas, stable schema (read-only) |
+| GET  | `/api/runs` | 所有已知运行(版本快照 ∪ ledger),运行选择器数据源 |
+| GET  | `/api/run/<run_id>` | 该 run 的八段漏斗:每段 进/存活/杀/存活率 + 杀因分布 + 裁决分布 |
+| GET  | `/api/run/<run_id>/stage/<stage>` | 段钻取:该段每条目 event/killed_by(+ 证据门缺项) |
+| GET  | `/api/run/<run_id>/idea/<id>` | 单 idea 全链路血统(信号→候选→因子→证据→裁决 + critique/judge/ask trace + 创始人标签) |
+| POST | `/api/run/stage` `{stage, from?, to?, ...}` | **破坏性**单段/区间重跑(覆盖工件 + 追加 ledger,run_id 从上游继承) |
+| POST | `/api/ask` `{run_id, idea_id, question, backend?}` | **实时追问**:就这条 idea 自由提问,router 即时(未配→mock 兜底),落 trace(stage=ask) |
+
+**动作与旧读端点(保留):**
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET  | `/api/me` · POST `/api/login` `/api/logout` | 鉴权(签名 cookie 会话) |
+| POST | `/api/run/generate` `{backend,sources,top_n}` | 跑 recall→rank |
+| POST | `/api/run/evaluate` `{backend,floor,top_n}` | 跑 enrich→portfolio |
+| POST | `/api/ledger/label` `{candidate_id,action}` | 星标/杀 = 写 ledger 当标签(操作即标签) |
+| POST | `/api/run/whatif-judge` | 非破坏性 judge 单段 what-if(不写盘) |
+| GET  | `/api/ledger/{funnel,verdicts,outcomes,trace}` | ledger 只读视图 |
+| PUT  | `/api/founder-profile` | 编辑 config/founder.json |
+| GET  | `/api/top3` | **machine endpoint** — 今日 top-3 非淘汰 idea,稳定 schema(只读,Bearer 鉴权) |
 
 `/api/top3` is for downstream agents, **not** the browser cookie session: it
 authenticates with `Authorization: Bearer <IDEA_TOP3_API_KEY>` and returns

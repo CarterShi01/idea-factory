@@ -490,3 +490,39 @@ dify 镜像不变式、CC-handoff pack 格式、部署拓扑。
 **动机备注**:本轮重构服务于 reference-miner 机制移植(docs/research/
 reference-scan/00-brief.md)——八段+横切各成为稳定"面",未来每面配开源参考源
 持续吸取经验;阶段使命与工件 I/O 写死在各 stage 包 `__init__.py` docstring。
+
+### 9.7 Studio v2:可调试优先的前端全局重设计(2026-07-08)
+
+创始人要求:整个前端必须**高度可调试**——每一步都能追踪挖到了什么、为什么被
+过滤/杀掉、能否重跑、能否实时追问;看前端就知道每条 idea 怎么来的、为什么被 pass。
+这是持续调优系统的基石。本轮同时完成 §6 的 M6(T6.1 漏斗 / T6.2 单 idea 全链路
+trace / T6.3 操作即标签 / T6.4 单段 what-if)——之前只在旧三包上做过雏形,现在在
+八段工件架构上完整落地。commits a24bf7e(观测 API)· da63c34(成本采集)· c41311c
+(实时追问)· 9eee518(前端重建),直推 master,259 后端测试全绿 + 前端 tsc/vite 通过。
+
+**诊断**:八段工件模型天生适合可调试(每段边界落盘、run_id 串全链、单段重跑原生
+支持),但 studio 前后端没跟上——后端只读 ideas/screened 两个工件,`_unwrap` 丢掉
+信封(run_id 从不透传→无法关联 trace);中间 5 个工件、每段 kill 原因图、证据门
+结果全在磁盘却无端点。数据基本已在磁盘,缺的是**观测 API + 围绕追踪重组的前端**。
+
+**四块落地:**
+1. **观测 API**:ledger 加 list_runs/stages_for_run/run_id 过滤/impressions_for_run;
+   versioning 快照全 7 段工件(原只存 2)+ 记 run_id,每个历史 run 完整可回放
+   (顺带修复 _stats 读信封当裸列表的潜伏 bug);app.py 信封保留读 + 前缀路由 +
+   /api/runs、/run/<id>(漏斗)、/stage(钻取)、/idea(全链路血统)、POST /run/stage(重跑)。
+2. **token/cost/latency**:LLMResponse 加 usage/latency_ms;Router 捕获 usage、
+   Dify 捕获 total_tokens、都计时;config/llm/prices.json(创始人填)+ cost_of;
+   共享 log_trace_batch,generate 段也落 trace——成本梯度 generate↔diligence 一眼
+   可见(便宜段每条百 token、昂贵段每条数千)。离线不变式:默认 rule/none 无 trace
+   无 token,idea run 默认产出字节不变。
+3. **实时追问 /api/ask**:就一条 idea 自由提问,从血统工件拼上下文 + config/llm/ask.json
+   (自由文本、system 锁『只依据上下文不编证据』),router 即时 / 未配降级 mock,
+   每轮落 trace(stage=ask);仅 router|mock(cc 违硬规则、dify 无必要故无需 dify 镜像)。
+4. **前端重建**:零依赖 hash 路由(深链可书签);运行为轴 IA——RunBar 运行选择器 →
+   RunFunnel 漏斗首页 → StageDrill 段钻取(+ 单段重跑二次确认)→ IdeaLineage 单 idea
+   纵向血统(每 LLM 步 TracePane 看 prompt+response+CostBadge;折入证据链/裁决理由/
+   人群反对 + 星标/what-if/追问);退休旧扁平 tab,富内容全部折入,不丢功能。
+
+**创始人待办**:`config/llm/prices.json` 填每模型真实单价(LKEAP tc-code/tc-think 等),
+否则前端成本列显示「未计价」。persona_sim/persona_pressure 的 per-idea trace 深接
+(recall/diligence 子步,量小)留作后续。
