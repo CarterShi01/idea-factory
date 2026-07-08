@@ -1,15 +1,24 @@
 import type {
+  AskBackend,
+  AskResult,
   Decision,
   FounderProfile,
   FunnelReport,
   Idea,
+  IdeaLineage,
   Overview,
+  RerunResult,
+  RunFunnel,
+  RunSummary,
   Signal,
+  StageDrill,
   TraceEntry,
   Version,
   WhatifBackend,
   WhatifJudgeResult,
 } from "./types";
+
+const enc = encodeURIComponent;
 
 const vq = (version?: string) => (version ? `?version=${encodeURIComponent(version)}` : "");
 
@@ -69,5 +78,20 @@ export const api = {
     req<WhatifJudgeResult>("/api/run/whatif-judge", {
       method: "POST",
       body: JSON.stringify({ idea_id: ideaId, overrides, backend }),
+    }),
+
+  // Studio v2: run-centric observability (funnel → stage drill → idea lineage → ask).
+  runs: () => req<RunSummary[]>("/api/runs"),
+  run: (runId: string) => req<RunFunnel>(`/api/run/${enc(runId)}`),
+  stageDrill: (runId: string, stage: string) =>
+    req<StageDrill>(`/api/run/${enc(runId)}/stage/${enc(stage)}`),
+  ideaLineage: (runId: string, ideaId: string) =>
+    req<IdeaLineage>(`/api/run/${enc(runId)}/idea/${enc(ideaId)}`),
+  rerunStage: (body: Record<string, unknown>) =>
+    req<RerunResult>("/api/run/stage", { method: "POST", body: JSON.stringify(body) }),
+  ask: (runId: string, ideaId: string, question: string, backend: AskBackend = "router") =>
+    req<AskResult>("/api/ask", {
+      method: "POST",
+      body: JSON.stringify({ run_id: runId, idea_id: ideaId, question, backend }),
     }),
 };

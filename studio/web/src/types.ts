@@ -16,6 +16,14 @@ export interface Idea {
   factors: Factors;
   alpha: number;
   decay: number;
+  // generate-stage narrative fields (present on candidates.json / ideas.json items)
+  mechanism?: string;
+  why_now?: string;
+  mvp_week1?: string;
+  why_only_me?: string;
+  first_10_customers?: string;
+  copy_fails_because?: string;
+  fusion_sources?: string[];
 }
 
 export type Verdict = "pursue" | "review" | "kill";
@@ -145,6 +153,109 @@ export interface TraceEntry {
   model: string;
   ts: string | null;
 }
+
+// ---- Studio v2: run-centric observability ----
+
+export interface Usage {
+  prompt_tokens: number | null;
+  completion_tokens: number | null;
+  total_tokens: number | null;
+}
+
+export interface RunSummary {
+  run_id: string;
+  version_id: string | null;
+  date: string;
+  week: string;
+  has_artifacts: boolean;
+  stages: string[];
+}
+
+export interface StageFunnelRow {
+  stage: string;
+  entered: number;
+  survived: number;
+  killed: number;
+  rate: number;
+  kill_reasons: Record<string, number>;
+  has_artifact: boolean;
+}
+
+export interface RunFunnel {
+  run_id: string;
+  week: string;
+  date: string;
+  stages: StageFunnelRow[];
+  verdict_distribution: Record<string, number>;
+  totals: { entered: number; survived_final: number };
+}
+
+export interface StageItem {
+  id: string;
+  event: "entered" | "survived" | "killed";
+  killed_by: string | null;
+  title: string;
+  source: string;
+  pain: string;
+  alpha?: number | null;
+  factors?: Factors;
+  gate?: { ready: boolean; missing: string[] } | null;
+}
+
+export interface StageDrill {
+  run_id: string;
+  stage: string;
+  entered: number;
+  survived: number;
+  killed: number;
+  degraded: boolean;
+  items: StageItem[];
+}
+
+export interface TraceRow {
+  entity_id: string;
+  prompt_version: string;
+  request: { system?: string; user?: string };
+  response: { text?: string; data?: Record<string, unknown>; ok?: boolean; error?: string };
+  model: string;
+  ts: string | null;
+  usage?: Usage | null;
+  cost?: number | null;
+  latency_ms?: number | null;
+}
+
+export interface IdeaLineage {
+  idea_id: string;
+  run_id: string;
+  signal: (Signal & { raw_text?: string; money_trace?: string }) | null;
+  triage: { survived: boolean; killed_by: string | null } | null;
+  candidate: Idea | null;
+  generate: { survived: boolean; killed_by: string | null } | null;
+  rank: { factors: Factors | null; alpha: number | null; decay: number | null; coarse_selected: boolean } | null;
+  enrich: { evidence: Evidence[]; gate: { ready: boolean; missing: string[] } | null };
+  diligence: Decision | null;
+  traces: Record<string, TraceRow[]>;
+  founder_labels: Record<string, unknown>[];
+}
+
+export interface RerunResult {
+  run_id: string;
+  week: string;
+  stages: { stage: string; entered: number; survived: number; killed: number }[];
+}
+
+export interface AskResult {
+  idea_id: string;
+  run_id: string;
+  question: string;
+  answer: string;
+  backend: string;
+  usage: Usage | null;
+  latency_ms: number | null;
+  ts: string;
+}
+
+export type AskBackend = "router" | "mock";
 
 export type WhatifBackend = "mock" | "router" | "dify";
 

@@ -1,84 +1,66 @@
 import { useEffect, useState } from "react";
 import { api } from "./api";
-import { Sidebar, type Tab } from "./components/Sidebar";
 import { Login } from "./pages/Login";
-import { Overview } from "./pages/Overview";
-import { Ideas } from "./pages/Ideas";
-import { Decisions } from "./pages/Decisions";
-import { Signals } from "./pages/Signals";
 import { RunPanel } from "./pages/RunPanel";
-import type { Version } from "./types";
 import { Profile } from "./pages/Profile";
-import { Funnel } from "./pages/Funnel";
+import { RunFunnel } from "./pages/RunFunnel";
+import { StageDrill } from "./pages/StageDrill";
+import { IdeaLineage } from "./pages/IdeaLineage";
+import { RunBar } from "./components/RunBar";
+import { useHashRoute, navigate } from "./hooks/useHashRoute";
+import type { RunSummary } from "./types";
 
 type Auth = "checking" | "in" | "out";
 
 export function App() {
   const [auth, setAuth] = useState<Auth>("checking");
-  const [tab, setTab] = useState<Tab>("overview");
-  const [nonce, setNonce] = useState(0); // bump to force-refresh pages after a run
-  const [versions, setVersions] = useState<Version[]>([]);
-  const [version, setVersion] = useState<string | undefined>(undefined); // undefined = latest
+  const [runs, setRuns] = useState<RunSummary[]>([]);
+  const route = useHashRoute();
 
   useEffect(() => {
-    api
-      .me()
-      .then((m) => setAuth(!m.auth || m.authed ? "in" : "out"))
-      .catch(() => setAuth("out"));
+    api.me().then((m) => setAuth(!m.auth || m.authed ? "in" : "out")).catch(() => setAuth("out"));
   }, []);
 
-  // Load the version list once authed; default the selection to the latest.
-  function loadVersions(selectLatest = false) {
-    api
-      .versions()
-      .then((vs) => {
-        setVersions(vs);
-        if (selectLatest || version === undefined) setVersion(vs[0]?.id);
-      })
-      .catch(() => setVersions([]));
+  function loadRuns(jumpLatest = false) {
+    api.runs().then((rs) => {
+      setRuns(rs);
+      if ((jumpLatest || route.name === "home") && rs[0]) navigate({ name: "run", runId: rs[0].run_id });
+    }).catch(() => setRuns([]));
   }
 
   useEffect(() => {
-    if (auth === "in") loadVersions();
+    if (auth === "in") loadRuns();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auth]);
 
-  if (auth === "checking") {
-    return <div className="login-wrap"><span className="spinner" /></div>;
-  }
-  if (auth === "out") {
-    return <Login onDone={() => setAuth("in")} />;
-  }
+  if (auth === "checking") return <div className="login-wrap"><span className="spinner" /></div>;
+  if (auth === "out") return <Login onDone={() => setAuth("in")} />;
 
   async function logout() {
     await api.logout().catch(() => {});
     setAuth("out");
   }
 
-  // After a run: a fresh version was committed — reload the list and jump to it.
-  const refresh = () => {
-    setNonce((n) => n + 1);
-    loadVersions(true);
-  };
+  // the run currently in focus (from the URL, else the newest)
+  const activeRun =
+    route.name === "run" || route.name === "stage" || route.name === "idea"
+      ? route.runId
+      : runs[0]?.run_id ?? null;
 
   return (
-    <div className="app">
-      <Sidebar
-        tab={tab}
-        onTab={setTab}
-        onLogout={logout}
-        versions={versions}
-        version={version}
-        onVersion={setVersion}
-      />
-      <main className="main" key={tab + nonce + (version ?? "latest")}>
-        {tab === "overview" && <Overview version={version} />}
-        {tab === "ideas" && <Ideas version={version} />}
-        {tab === "decisions" && <Decisions version={version} />}
-        {tab === "funnel" && <Funnel />}
-        {tab === "signals" && <Signals />}
-        {tab === "run" && <RunPanel onRan={refresh} />}
-        {tab === "profile" && <Profile />}
+    <div className="studio">
+      <RunBar runs={runs} runId={activeRun} route={route} onLogout={logout} />
+      <main className="stage-main">
+        {route.name === "controls" && <RunPanel onRan={() => loadRuns(true)} />}
+        {route.name === "profile" && <Profile />}
+        {route.name === "run" && <RunFunnel key={route.runId} runId={route.runId} />}
+        {route.name === "stage" && <StageDrill key={route.runId + route.stage} runId={route.runId} stage={route.stage} />}
+        {route.name === "idea" && <IdeaLineage key={route.runId + route.ideaId} runId={route.runId} ideaId={route.ideaId} />}
+        {route.name === "home" && (
+          <div className="empty">
+            {runs.length ? "选择一个运行…" : "还没有任何运行 —— 打开「运行」触发一次 idea run。"}
+          </div>
+        )}
       </main>
     </div>
   );
