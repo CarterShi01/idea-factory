@@ -21,6 +21,38 @@ def test_record_outcome_writes_ledger(tmp_path):
     assert stored[0]["candidate_id"] == "c1"
 
 
+def test_record_outcome_carries_event_id_and_reported_by(tmp_path):
+    out = retro.record_outcome(
+        tmp_path, candidate_id="c1", tested_at="2026-07-20",
+        metric="signups", actual_value=4.0, event_id="oc-card-1", reported_by="oc",
+    )
+    assert out.event_id == "oc-card-1"
+    assert out.reported_by == "oc"
+    stored = ledger.read_outcomes(tmp_path)
+    assert stored[0]["event_id"] == "oc-card-1"
+    assert stored[0]["reported_by"] == "oc"
+
+
+def test_record_outcome_default_reported_by_is_founder(tmp_path):
+    out = retro.record_outcome(tmp_path, "c1", "2026-07-12", "signups", 7.0, target=10.0)
+    assert out.reported_by == "founder"
+    assert out.event_id == ""
+
+
+def test_event_already_recorded(tmp_path):
+    assert retro.event_already_recorded(tmp_path, "oc-card-1") is False
+    retro.record_outcome(tmp_path, "c1", "2026-07-20", "signups", 4.0, event_id="oc-card-1")
+    assert retro.event_already_recorded(tmp_path, "oc-card-1") is True
+    assert retro.event_already_recorded(tmp_path, "oc-card-2") is False
+
+
+def test_event_already_recorded_ignores_empty_event_id(tmp_path):
+    # Founder CLI entries never set event_id -- empty string must never collide.
+    retro.record_outcome(tmp_path, "c1", "2026-07-12", "signups", 7.0)
+    retro.record_outcome(tmp_path, "c2", "2026-07-13", "signups", 3.0)
+    assert retro.event_already_recorded(tmp_path, "") is False
+
+
 def test_prediction_error_signed_relative():
     assert retro.prediction_error({"prediction": {"target": 10.0}, "actual": {"value": 7.0}}) == -0.3
     assert retro.prediction_error({"prediction": {"target": 10.0}, "actual": {"value": 15.0}}) == 0.5

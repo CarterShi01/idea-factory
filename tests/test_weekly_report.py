@@ -53,18 +53,60 @@ def test_weekly_report_tier_labels_and_evidence_gap_note(tmp_path):
     assert "暂无证据" in text  # B has no evidence entries at all
 
 
-def test_weekly_report_smoke_test_uses_first_10_customers_and_pricing_evidence(tmp_path):
-    e = Evaluation(idea_id="a", title="A", verdict=PURSUE, eval_score=90, evidence=[
-        {"kind": "competitor_pricing", "source_url": "u", "summary": "s", "source_date": "2026-05-01",
-         "valid": True, "numbers": {"price": 29, "currency": "USD"}},
-    ])
+def test_weekly_report_smoke_test_uses_first_10_customers_and_experiment_spec(tmp_path):
+    e = Evaluation(idea_id="a", title="A", verdict=PURSUE, eval_score=90, experiment={
+        "metric": "preorders", "target": 10, "kill_below": 3,
+        "horizon_days": 7, "budget_band": "0-500元",
+    })
     idea = _idea("a", first_10_customers="在相关社群发帖招募")
     path = tmp_path / "weekly_report.md"
     write_weekly_report([e], {"a": idea}, path, week="2026-W27")
 
     text = path.read_text(encoding="utf-8")
     assert "在相关社群发帖招募" in text
-    assert "29USD" in text
+    assert "preorders ≥ 10" in text
+    assert "低于 3 判输" in text
+    assert "idea retro" in text
+
+
+def test_weekly_report_smoke_test_notes_missing_experiment_spec(tmp_path):
+    e = Evaluation(idea_id="a", title="A", verdict=REVIEW, eval_score=50)  # experiment left empty
+    path = tmp_path / "weekly_report.md"
+    write_weekly_report([e], {"a": _idea("a")}, path, week="2026-W27")
+
+    text = path.read_text(encoding="utf-8")
+    assert "暂无结构化实验规格" in text
+
+
+def test_weekly_report_appends_calibrate_tail_when_ok(tmp_path):
+    e = Evaluation(idea_id="a", title="A", verdict=PURSUE, eval_score=90)
+    path = tmp_path / "weekly_report.md"
+    report = {"status": "ok", "count": 12, "message": "样本量足够——…",
+              "correlations": {"pain_intensity": 0.42, "build_cost": -0.1}}
+    write_weekly_report([e], {"a": _idea("a")}, path, week="2026-W27", calibrate_report=report)
+
+    text = path.read_text(encoding="utf-8")
+    assert "因子校准" in text
+    assert "pain_intensity: +0.4200" in text
+
+
+def test_weekly_report_omits_calibrate_tail_when_insufficient(tmp_path):
+    e = Evaluation(idea_id="a", title="A", verdict=PURSUE, eval_score=90)
+    path = tmp_path / "weekly_report.md"
+    report = {"status": "insufficient_data", "count": 2, "min_sample": 10, "message": "样本不足…"}
+    write_weekly_report([e], {"a": _idea("a")}, path, week="2026-W27", calibrate_report=report)
+
+    text = path.read_text(encoding="utf-8")
+    assert "因子校准" not in text
+
+
+def test_weekly_report_omits_calibrate_tail_when_none(tmp_path):
+    e = Evaluation(idea_id="a", title="A", verdict=PURSUE, eval_score=90)
+    path = tmp_path / "weekly_report.md"
+    write_weekly_report([e], {"a": _idea("a")}, path, week="2026-W27")  # calibrate_report defaults None
+
+    text = path.read_text(encoding="utf-8")
+    assert "因子校准" not in text
 
 
 def test_weekly_report_renders_persona_objections(tmp_path):

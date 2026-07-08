@@ -128,6 +128,18 @@ def run(
         today, job_dir, injected=backends,
     )
 
+    # Cross-stage glue (composer-only, same reason ctx.backends is pre-built
+    # here rather than by the stage itself): portfolio's weekly_report wants a
+    # read-only calibrate summary, but portfolio may not import its sibling
+    # retro stage (isolation rule) -- so pipeline.py computes it and hands the
+    # plain-dict result down via StageContext. Skipped when portfolio isn't in
+    # this run's stage range (nothing would consume it).
+    calibrate_report = None
+    if "portfolio" in stages_to_run:
+        from idea_factory.stages.retro import calibrate
+
+        calibrate_report = calibrate.suggest_weights(data_dir)
+
     ctx = StageContext(
         data_dir=data_dir, output_dir=output_dir, today=today,
         run_id=run_id, week=week, backends=built,
@@ -135,6 +147,7 @@ def run(
         floor=floor, max_pursue_frac=max_pursue_frac,
         live=live, use_state=use_state, critique=critique, version=version,
         generate_backend_name=generate_backend,
+        calibrate_report=calibrate_report,
     )
 
     result = RunResult(run_id=run_id, week=week)

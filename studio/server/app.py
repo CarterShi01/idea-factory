@@ -43,6 +43,7 @@ from idea_factory.stages.diligence import gate as diligence_gate  # noqa: E402
 from idea_factory.stages.diligence import judge as diligence_judge  # noqa: E402
 from idea_factory.stages.recall.collect import collect_all  # noqa: E402
 from idea_factory.stages.recall.normalize import normalize  # noqa: E402
+from idea_factory.stages.retro import outcomes as retro_outcomes  # noqa: E402
 from idea_factory.stages.retro import stats as eval_stats  # noqa: E402
 
 load_dotenv(REPO_ROOT / ".env")
@@ -439,6 +440,25 @@ def top3() -> dict:
     }
 
 
+def bets() -> dict:
+    """Read-only: the latest run's bet_memos.json (agent-service-plan.md §2.2),
+    verbatim -- the structured out-bound boundary artifact for oc's DMZ tool.
+    Superset of ``top3()`` (full hypothesis/evidence/experiment, not a one-liner);
+    ``top3`` stays as-is for existing consumers.
+    """
+    path = _artifact_path("bet_memos.json", None)
+    envelope = _read_json(path, None)
+    if not isinstance(envelope, dict) or "items" not in envelope:
+        return {"run_id": "", "week": "", "date": "", "count": 0, "bets": []}
+    return {
+        "run_id": envelope.get("run_id", ""),
+        "week": envelope.get("week", ""),
+        "date": envelope.get("date", ""),
+        "count": envelope.get("count", 0),
+        "bets": envelope.get("items", []),
+    }
+
+
 def signals() -> list[dict]:
     raw = collect_all(DATA_DIR)
     return [s.to_dict() for s in normalize(raw)]
@@ -578,6 +598,53 @@ def ledger_outcomes() -> list[dict]:
 
 def ledger_trace(run_id: str, stage: str) -> list[dict]:
     return ledger.read_trace(DATA_DIR, run_id, stage)
+
+
+def _target_from_bet_memo(candidate_id: str, metric: str) -> float | None:
+    """Best-effort target lookup for an outcome event that omits ``target``:
+    the latest bet_memos.json's experiment.target for this candidate, only
+    if its metric name matches (never guess a target for the wrong metric).
+    """
+    for b in _load_json("bet_memos.json", None, []):
+        if b.get("bet_id") != candidate_id:
+            continue
+        exp = b.get("experiment") or {}
+        if exp.get("metric") == metric and isinstance(exp.get("target"), (int, float)):
+            return float(exp["target"])
+    return None
+
+
+def do_outcome(body: dict) -> dict:
+    """POST /api/outcome -- the inbound boundary artifact (agent-service-plan.md
+    §2.3, §0: "采集是 oc 的,消化是 idea-factory 的"). oc pushes a bet's
+    real-world result here after it plays out on its own kanban; idea-factory
+    never reads oc's board itself. Idempotent on ``event_id`` so oc's push
+    workflow can retry freely without double-recording -- a resend is a 200
+    no-op (``duplicate: true``), never a second ledger row.
+    """
+    candidate_id = (body.get("candidate_id") or "").strip()
+    tested_at = (body.get("tested_at") or "").strip()
+    metric = (body.get("metric") or "").strip()
+    actual = body.get("actual")
+    if not candidate_id or not tested_at or not metric or actual is None:
+        raise ValueError("candidate_id, tested_at, metric and actual are required")
+    event_id = (body.get("event_id") or "").strip()
+    reported_by = (body.get("reported_by") or "oc").strip()
+
+    if retro_outcomes.event_already_recorded(DATA_DIR, event_id):
+        return {"ok": True, "duplicate": True, "event_id": event_id}
+
+    target = body.get("target")
+    if target is None:
+        target = _target_from_bet_memo(candidate_id, metric)
+
+    retro_outcomes.record_outcome(
+        DATA_DIR, candidate_id, tested_at, metric, float(actual),
+        target=target, horizon_days=body.get("horizon_days"),
+        first_revenue=body.get("first_revenue"), lesson=(body.get("lesson") or ""),
+        event_id=event_id, reported_by=reported_by,
+    )
+    return {"ok": True, "duplicate": False, "candidate_id": candidate_id, "target_used": target}
 
 
 def do_label(body: dict) -> dict:
@@ -755,7 +822,8 @@ class Handler(BaseHTTPRequestHandler):
         return (not _auth_enabled()) or _valid_token(self._cookie_token())
 
     def _bearer_ok(self) -> bool:
-        """Machine auth for /api/top3: Authorization: Bearer <IDEA_TOP3_API_KEY>.
+        """Machine auth (oc, not a browser) for /api/top3, /api/bets and
+        POST /api/outcome: Authorization: Bearer <IDEA_TOP3_API_KEY>.
 
         Empty key => locked (never serves unauthed). Constant-time compare.
         """
@@ -801,6 +869,16 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", "0")
             self.end_headers()
             return
+        # machine endpoint: Bearer-key auth (oc pushes outcomes, no browser cookie)
+        if path == "/api/outcome":
+            if not self._bearer_ok():
+                return self._json({"error": "unauthorized"}, 401)
+            try:
+                return self._json(do_outcome(body))
+            except ValueError as exc:
+                return self._json({"error": str(exc)}, 400)
+            except Exception as exc:  # noqa: BLE001
+                return self._json({"error": f"{type(exc).__name__}: {exc}"}, 500)
         if not self._authed():
             return self._json({"error": "unauthorized"}, 401)
         try:
@@ -844,12 +922,19 @@ class Handler(BaseHTTPRequestHandler):
         query = query or {}
         if path == "/api/me":
             return self._json({"auth": _auth_enabled(), "authed": self._authed()})
-        # machine endpoint: Bearer-key auth, separate from the browser cookie session
+        # machine endpoints: Bearer-key auth, separate from the browser cookie session
         if path == "/api/top3":
             if not self._bearer_ok():
                 return self._json({"error": "unauthorized"}, 401)
             try:
                 return self._json(top3())
+            except Exception as exc:  # noqa: BLE001
+                return self._json({"error": f"{type(exc).__name__}: {exc}"}, 500)
+        if path == "/api/bets":
+            if not self._bearer_ok():
+                return self._json({"error": "unauthorized"}, 401)
+            try:
+                return self._json(bets())
             except Exception as exc:  # noqa: BLE001
                 return self._json({"error": f"{type(exc).__name__}: {exc}"}, 500)
         if not self._authed():

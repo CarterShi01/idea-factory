@@ -126,7 +126,10 @@ workflow:
             证据引用纪律（新增，重要）：user 消息里的【钱的证据链】(evidence_block) 如果非空，你必须在 reasons 字段里给出 1-3 条支撑你 verdict 的具体理由，每条理由如果援引了某条证据就把该证据的 id（如 competitor_pricing-xxx-0）原样填进这条理由的 evidence_ids 数组，没有对应证据支撑的理由就填空数组——绝不允许编造不存在的证据 id。如果 evidence_block 写着暂无证据，你给 kill 时不能声称有证据支撑；系统会校验：证据链非空但你的 kill 一条都没引用真实证据 id，会被自动打回 review 复核，视为你的淘汰不成立。
 
 
-            严格只输出一个 JSON 对象，不要任何解释、不要 markdown 代码块。格式必须是：{"verdict": "pursue|review|kill", "score": 0-100, "confidence": "high|medium|low", "scores": {"pain_real": 0-1, "solo_buildable": 0-1, "reachable": 0-1, "defensible": 0-1, "timing": 0-1}, "respond_to_critique": "针对 devil''s advocate 最致命的几条反驳的逐条回应", "killer_objection": "你认为最致命的一条质疑", "riskiest_assumption": "最危险的假设", "cheap_experiment": "≤2 周/≤$100 可证伪的最小实验", "reasons": [{"claim": "支撑你 verdict 的一条具体理由", "evidence_ids": ["援引的证据id，没有就是空数组"]}]}。键名必须完全一致。'
+            实验规格纪律（重要，让 pursue 变成可证伪的下注）：verdict=pursue 时，必须在 experiment 字段里把 cheap_experiment 拆成结构化的五个子字段，全部必填——metric（一个可数指标名，如 signups/preorders/replies/paid）、target（数字，达到算赢）、kill_below（数字，低于它算输，必须小于 target）、horizon_days（整数，几天内出结果）、budget_band（三选一："0-500元"/"500-2000元"/"2000元以上"）。**没有完整实验规格（五个子字段任一缺失）的 pursue 会被系统强制降级为 review**——因为一个不可证伪的『值得做』和乐观话术没有区别。review/kill 也应给出尽量完整的 experiment（供人工复核参考），但不强制。
+
+
+            严格只输出一个 JSON 对象，不要任何解释、不要 markdown 代码块。格式必须是：{"verdict": "pursue|review|kill", "score": 0-100, "confidence": "high|medium|low", "scores": {"pain_real": 0-1, "solo_buildable": 0-1, "reachable": 0-1, "defensible": 0-1, "timing": 0-1}, "respond_to_critique": "针对 devil''s advocate 最致命的几条反驳的逐条回应", "killer_objection": "你认为最致命的一条质疑", "riskiest_assumption": "最危险的假设", "cheap_experiment": "≤2 周/≤$100 可证伪的最小实验", "experiment": {"metric": "可数指标名", "target": 数字, "kill_below": 数字, "horizon_days": 整数, "budget_band": "0-500元|500-2000元|2000元以上"}, "reasons": [{"claim": "支撑你 verdict 的一条具体理由", "evidence_ids": ["援引的证据id，没有就是空数组"]}]}。键名必须完全一致。'
         - role: user
           text: '{{#start.user#}}'
         title: LLM

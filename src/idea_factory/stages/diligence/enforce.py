@@ -13,6 +13,7 @@ from idea_factory.contract.models import (
     PURSUE,
     REVIEW,
     Evaluation,
+    experiment_is_complete,
     sort_evaluations,
 )
 
@@ -33,6 +34,26 @@ def enforce_evidence_grounding(evaluations: list[Evaluation]) -> list[Evaluation
             e.evidence_demoted = True
             reason = "/".join(e.evidence_missing) or "证据不足"
             e.risk_flags.append(f"无真实证据支撑({reason})——先补证据,再判定可测,不能直接 pursue。")
+    return sort_evaluations(evaluations)
+
+
+def enforce_experiment_spec(evaluations: list[Evaluation]) -> list[Evaluation]:
+    """Demote a PURSUE verdict to REVIEW when it lacks a complete ExperimentSpec.
+
+    agent-service-plan.md §2.1: a PURSUE is a bet, and a bet without a
+    falsifiable experiment (metric/target/kill_below/horizon_days/budget_band)
+    is not distinguishable from optimistic talk -- the same discipline as
+    :func:`enforce_evidence_grounding` (no PURSUE without evidence) and
+    :func:`enforce_citation` (no un-cited KILL), applied to the bet's own exit
+    criteria instead of its entry criteria. gate.py always fills a conservative
+    rule-based default, so this only fires when a caller hand-builds an
+    Evaluation without going through gate.evaluate_idea.
+    """
+    for e in evaluations:
+        if e.verdict == PURSUE and not experiment_is_complete(e.experiment):
+            e.verdict = REVIEW
+            e.experiment_demoted = True
+            e.risk_flags.append("没有完整的实验规格(metric/target/kill_below/horizon_days/budget_band)——不可证伪的 pursue 不成立,先补齐再判定可测。")
     return sort_evaluations(evaluations)
 
 

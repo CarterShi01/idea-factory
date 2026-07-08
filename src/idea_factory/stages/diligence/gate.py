@@ -67,6 +67,45 @@ _EXPERIMENT = {
     "founder_fit": "写清这条具体杠杆你哪项独占资源(蒙语/内蒙信任/安全云引荐);找 1 个只有你能拿到的资源验证。（2 天，0 元）",
 }
 
+# Structured twin of _EXPERIMENT above (agent-service-plan.md §2.1 ExperimentSpec).
+# A conservative, zero-token rule default -- judge.py's LLM version overrides it
+# when that step runs. Every entry has all of EXPERIMENT_FIELDS so a rule-only
+# PURSUE (no judge backend) still clears enforce_experiment_spec.
+_EXPERIMENT_SPEC = {
+    "pain_intensity": {
+        "metric": "problem_interview_positive", "target": 3, "kill_below": 1,
+        "horizon_days": 7, "budget_band": "0-500元",
+    },
+    "build_cost": {
+        "metric": "spike_feasible", "target": 1, "kill_below": 1,
+        "horizon_days": 2, "budget_band": "0-500元",
+    },
+    "distribution_fit": {
+        "metric": "reply_count", "target": 5, "kill_below": 1,
+        "horizon_days": 7, "budget_band": "0-500元",
+    },
+    "market_freshness": {
+        "metric": "trend_rising_confirmed", "target": 1, "kill_below": 1,
+        "horizon_days": 1, "budget_band": "0-500元",
+    },
+    "competition_density": {
+        "metric": "differentiation_gap_found", "target": 1, "kill_below": 1,
+        "horizon_days": 2, "budget_band": "0-500元",
+    },
+    "moat_signal": {
+        "metric": "users_validated", "target": 3, "kill_below": 1,
+        "horizon_days": 3, "budget_band": "0-500元",
+    },
+    "payment_signal": {
+        "metric": "preorders", "target": 5, "kill_below": 1,
+        "horizon_days": 7, "budget_band": "0-500元",
+    },
+    "founder_fit": {
+        "metric": "unique_resource_validated", "target": 1, "kill_below": 1,
+        "horizon_days": 2, "budget_band": "0-500元",
+    },
+}
+
 
 def _rubric_score(factors: dict[str, float]) -> float:
     total = sum(RUBRIC_WEIGHTS.get(name, 0.0) * factors.get(name, 0.0) for name in FACTORS)
@@ -144,6 +183,7 @@ def evaluate_idea(idea: dict, floor: float = DEFAULT_FLOOR) -> Evaluation:
         killed_by=killed_by,
         riskiest_assumption=_ASSUMPTION.get(dim, ""),
         cheap_experiment=_EXPERIMENT.get(dim, ""),
+        experiment=dict(_EXPERIMENT_SPEC.get(dim, {})),
         risk_flags=_risk_flags(idea, factors),
         confidence=idea.get("confidence", "real"),
         factors=factors,

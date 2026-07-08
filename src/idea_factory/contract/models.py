@@ -205,6 +205,26 @@ class Evidence:
         return cls(**known)
 
 
+# --- experiment spec (agent-service-plan.md §2.1) ---------------------------
+#
+# The structured, falsifiable half of a bet: what to test, what number counts
+# as a win, what counts as a loss, how much money it costs. Deliberately
+# shaped to match Outcome.prediction below (metric/target/horizon_days) --
+# the odds written down when a bet is placed are exactly the odds retro reads
+# back to compute prediction_error. This is what turns "PURSUE" from an
+# opinion into a falsifiable claim; enforce_experiment_spec (diligence/enforce.py)
+# demotes a PURSUE that doesn't have one to REVIEW.
+
+EXPERIMENT_FIELDS = ("metric", "target", "horizon_days", "kill_below", "budget_band")
+
+
+def experiment_is_complete(experiment: dict) -> bool:
+    """True iff every field in EXPERIMENT_FIELDS is present and non-empty."""
+    if not isinstance(experiment, dict):
+        return False
+    return all(experiment.get(f) not in (None, "") for f in EXPERIMENT_FIELDS)
+
+
 @dataclass
 class Outcome:
     """A founder-recorded real-world smoke-test result (retro's ground truth).
@@ -220,6 +240,12 @@ class Outcome:
     actual: dict = field(default_factory=dict)
     first_revenue: float | None = None
     lesson: str = ""
+    # agent-service-plan.md §2.3: oc pushes outcome events; event_id is the
+    # idempotency key (a resend of the same event must not double-record).
+    # reported_by distinguishes an oc-pushed event from the founder's own
+    # `idea retro` CLI entry (both land in the same outcomes.jsonl).
+    event_id: str = ""
+    reported_by: str = "founder"
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -229,7 +255,7 @@ class Outcome:
         known = {
             k: d[k] for k in (
                 "candidate_id", "tested_at", "prediction", "actual",
-                "first_revenue", "lesson",
+                "first_revenue", "lesson", "event_id", "reported_by",
             ) if k in d
         }
         return cls(**known)
@@ -258,7 +284,13 @@ class Evaluation:
     eval_score: float           # 0-100
     killed_by: list[str] = field(default_factory=list)
     riskiest_assumption: str = ""
-    cheap_experiment: str = ""
+    cheap_experiment: str = ""      # free-text summary, kept for backward compat/display
+    # Structured experiment spec (EXPERIMENT_FIELDS above) -- the falsifiable
+    # bet: what to measure, what target/kill_below counts as win/lose, budget
+    # band. gate.py fills a conservative rule-based default; judge.py overrides
+    # with the LLM's version when it runs.
+    experiment: dict = field(default_factory=dict)
+    experiment_demoted: bool = False  # True if a PURSUE lacked a complete spec
     risk_flags: list[str] = field(default_factory=list)
     confidence: str = "real"
     factors: dict[str, float] = field(default_factory=dict)

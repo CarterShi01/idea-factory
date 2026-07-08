@@ -1,9 +1,12 @@
-"""⑦portfolio —— 组合出口:打散成一个组合,写周报 + 决策备忘(纯代码,零 token)。
+"""⑦portfolio —— 组合出口:打散成一个组合,写周报 + 决策备忘 + 下注说明书(纯代码,零 token)。
 
 打散(.diversify:来源桶配额中文为主 + 创始人边单边上限 + 近重去聚类)选出终端
 UI_N 组合排到头部;报告(.report)写 decision_memos.md(日常)+ weekly_report.md
-(北极星工件,每条带证据链 + 48h 测试包)。最后 versioning 快照本次 run。
-读:verdicts.json + ideas.json  写:screened.json + decision_memos.md + weekly_report.md
+(北极星工件,每条带证据链 + 结构化实验规格);.bets 写 bet_memos.json——投研部
+与 oc 之间的出向边界工件(agent-service-plan.md §2.2),机读、供 oc 消费,不建议
+怎么拆卡。最后 versioning 快照本次 run。
+读:verdicts.json + ideas.json
+写:screened.json + decision_memos.md + weekly_report.md + bet_memos.json
 只 import contract / runtime / factors。
 """
 
@@ -16,7 +19,7 @@ from idea_factory.contract.models import KILL, PURSUE, REVIEW, Evaluation
 from idea_factory.contract.stage import StageContext, StageResult
 from idea_factory.runtime import ledger, versioning
 
-from . import diversify, report
+from . import bets, diversify, report
 
 
 def run(ctx: StageContext) -> StageResult:
@@ -36,6 +39,13 @@ def run(ctx: StageContext) -> StageResult:
     report.write_weekly_report(
         evaluations, ideas_by_id, weekly_path,
         week=ctx.week or ledger.week_of(ctx.today.isoformat()), top_n=ctx.weekly_top_n,
+        calibrate_report=ctx.calibrate_report,
+    )
+    bets_path = out / "bet_memos.json"
+    bets.write_bet_memos(
+        evaluations, ideas_by_id, bets_path,
+        run_id=ctx.run_id, week=ctx.week or ledger.week_of(ctx.today.isoformat()),
+        today=ctx.today, top_n=ctx.weekly_top_n,
     )
 
     version_id = versioning.commit_version(ctx.output_dir, ctx.today.isoformat()) if ctx.version else None
@@ -50,6 +60,6 @@ def run(ctx: StageContext) -> StageResult:
         killed=counts["killed"], artifact=path,
         extra={
             "memos": str(memos_path), "weekly_report": str(weekly_path),
-            "version_id": version_id, **counts,
+            "bet_memos": str(bets_path), "version_id": version_id, **counts,
         },
     )

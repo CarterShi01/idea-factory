@@ -64,17 +64,40 @@ STUDIO_PASSWORD='a-strong-password' python3 studio/server/app.py   # serves dist
 | GET  | `/api/ledger/{funnel,verdicts,outcomes,trace}` | ledger 只读视图 |
 | PUT  | `/api/founder-profile` | 编辑 config/founder.json |
 | GET  | `/api/top3` | **machine endpoint** — 今日 top-3 非淘汰 idea,稳定 schema(只读,Bearer 鉴权) |
+| GET  | `/api/bets` | **machine endpoint** — 最新 run 的完整下注说明书(bet_memos.json 原样,只读,Bearer 鉴权) |
+| POST | `/api/outcome` | **machine endpoint** — oc 推送赌局结果(agent-service-plan.md §2.3),`event_id` 幂等,Bearer 鉴权 |
 
-`/api/top3` is for downstream agents, **not** the browser cookie session: it
-authenticates with `Authorization: Bearer <IDEA_TOP3_API_KEY>` and returns
-`{date, generated_at, count, top3:[{rank, idea_id, title, one_liner, score,
-verdict, riskiest_assumption, cheap_experiment}]}`. It only reads
-`data/processed/screened.json` (no generate, no writes); missing/empty file =>
-`200 {"count":0,"top3":[]}`. If `IDEA_TOP3_API_KEY` is unset the endpoint is
-locked (401 for everyone). Example:
+`/api/top3` / `/api/bets` / `/api/outcome` are for downstream agents (oc),
+**not** the browser cookie session: `Authorization: Bearer <IDEA_TOP3_API_KEY>`.
+`/api/top3` returns `{date, generated_at, count, top3:[{rank, idea_id, title,
+one_liner, score, verdict, riskiest_assumption, cheap_experiment}]}` — a
+one-liner digest. `/api/bets` is the superset: `{run_id, week, date, count,
+bets:[{bet_id, run_id, title, verdict, hypothesis, evidence, riskiest_assumption,
+killer_objection, persona_objections, experiment, eval_score, confidence,
+lineage_url}]}` — full hypothesis + evidence chain + structured `experiment`
+spec (metric/target/kill_below/horizon_days/budget_band), agent-service-plan.md
+§2.2's out-bound boundary artifact. Both only read from disk (no generate, no
+writes); missing/empty artifact => `200` with an empty list. If
+`IDEA_TOP3_API_KEY` is unset both are locked (401 for everyone). Example:
 
 ```bash
 curl -H "Authorization: Bearer $IDEA_TOP3_API_KEY" http://127.0.0.1:3010/api/top3
+curl -H "Authorization: Bearer $IDEA_TOP3_API_KEY" http://127.0.0.1:3010/api/bets
+```
+
+`POST /api/outcome` is the in-bound boundary artifact (agent-service-plan.md
+§2.3): oc pushes a bet's real-world result after it plays out on its own
+kanban — idea-factory never reads oc's board itself, only receives. Body:
+`{event_id, candidate_id, tested_at, metric, actual, target?, horizon_days?,
+first_revenue?, lesson?, reported_by?}`; `target` auto-fills from the matching
+bet memo's `experiment.target` when omitted (same metric only). Idempotent on
+`event_id`: a resend is a `200 {"ok":true,"duplicate":true}` no-op, never a
+second ledger row — safe to retry.
+
+```bash
+curl -X POST -H "Authorization: Bearer $IDEA_TOP3_API_KEY" -H "Content-Type: application/json" \
+  -d '{"event_id":"oc-card-1234-final","candidate_id":"<idea_id>","tested_at":"2026-07-20","metric":"signups","actual":4,"reported_by":"oc"}' \
+  http://127.0.0.1:3010/api/outcome
 ```
 
 Env: `STUDIO_PASSWORD` (required for the UI/cookie auth), `STUDIO_PORT` (default

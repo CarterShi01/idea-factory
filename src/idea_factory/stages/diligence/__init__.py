@@ -1,8 +1,9 @@
 """⑥diligence —— 拿证据开庭:便宜前闸 → 对抗批判 → LLM 裁决 → 强制纪律(最贵的一段)。
 
 顺序:规则 kill-gate(.gate,零 token)→ 挂证据(enrich 工件)→ critique(.critique,
-devil's advocate)→ judge(.judge,LLM-as-judge)→ 引证校验/证据接地/强制分布
-(.enforce,纯代码)→ persona 压力测试(.persona_pressure,advisory,不改判决)。
+devil's advocate)→ judge(.judge,LLM-as-judge)→ 引证校验/证据接地/实验规格/
+强制分布(.enforce,纯代码)→ persona 压力测试(.persona_pressure,advisory,
+不改判决)。
 critique/judge/persona 由 backends 旗门控,默认 None = 零 token(成本梯度)。
 读:ideas.json + evidence.json  写:verdicts.json + ledger(verdicts/impressions/traces)
 只 import contract / runtime / factors。可能抛 PendingHandoff,由 CLI 接。
@@ -53,6 +54,7 @@ def run(ctx: StageContext) -> StageResult:
 
     evaluations = enforce.enforce_citation(evaluations)
     evaluations = enforce.enforce_evidence_grounding(evaluations)
+    evaluations = enforce.enforce_experiment_spec(evaluations)
     max_frac = ctx.max_pursue_frac if ctx.max_pursue_frac is not None else enforce.DEFAULT_MAX_PURSUE_FRAC
     evaluations = enforce.enforce_forced_distribution(evaluations, max_pursue_frac=max_frac)
 

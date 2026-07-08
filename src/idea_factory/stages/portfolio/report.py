@@ -143,21 +143,24 @@ def _evidence_lines(evidence: list[dict]) -> list[str]:
 
 
 def _smoke_test_block(idea: dict, e: Evaluation) -> list[str]:
-    """A rule-composed draft smoke-test package -- a scaffold to fill in by hand,
-    not an LLM-authored plan (that's a documented follow-up, see plan §5⑤/⑦).
+    """The falsifiable half of the bet, rendered from ``e.experiment``
+    (agent-service-plan.md §2.1 ExperimentSpec) -- single source of truth with
+    ``bet_memos.json`` (:mod:`idea_factory.stages.portfolio.bets`), not a
+    separately-guessed heuristic.
     """
     channel = (idea.get("first_10_customers") or "").strip() or "(未指定 —— 补 first_10_customers)"
-    price_hint = "; ".join(
-        f"{ev.get('numbers', {}).get('price')}{ev.get('numbers', {}).get('currency', '')}"
-        for ev in e.evidence
-        if ev.get("kind") == "competitor_pricing" and ev.get("numbers", {}).get("price") is not None
-    ) or "(参考同类定价证据自定)"
-    return [
-        "- **48h 测试包**（草稿,需人工补全）：",
-        f"  - 渠道：{channel}",
-        f"  - 参考定价：{price_hint}",
-        "  - 预测：待人工填写(如『7 天内 10 个邮箱』),测完用 `idea-eval retro` 回填实际数字",
-    ]
+    exp = e.experiment or {}
+    lines = ["- **48h 测试包**：", f"  - 渠道：{channel}"]
+    if exp:
+        lines.append(
+            f"  - 指标：{exp.get('metric', '?')} ≥ {exp.get('target', '?')}"
+            f"（低于 {exp.get('kill_below', '?')} 判输）· {exp.get('horizon_days', '?')} 天内 ·"
+            f" 预算 {exp.get('budget_band', '?')}"
+        )
+    else:
+        lines.append("  - 指标：(暂无结构化实验规格 —— 需先跑 diligence)")
+    lines.append("  - 测完用 `idea retro` 回填实际数字（metric 名与上面一致，报告才能对账）")
+    return lines
 
 
 def write_weekly_report(
@@ -166,10 +169,20 @@ def write_weekly_report(
     path: Path,
     week: str,
     top_n: int = 3,
+    calibrate_report: dict | None = None,
 ) -> None:
     """Write the §8-format weekly report: top ``top_n`` survivors only, each
     with its evidence chain + a smoke-test scaffold. Ranked pursue-first, then
     review, by score -- mirrors ``_sort``'s ordering.
+
+    ``calibrate_report`` (agent-service-plan.md §B3, optional): a pre-computed
+    :func:`idea_factory.stages.retro.calibrate.suggest_weights` result --
+    passed in as a plain dict, never imported here, exactly like
+    ``StageContext.backends``. portfolio may not import the sibling ``retro``
+    stage (isolation rule); ``pipeline.py`` computes this and hands it down.
+    Rendered only when ``status == "ok"``; below ``min_sample`` calibrate's own
+    "insufficient_data" verdict is the correct, honest signal and the report
+    stays silent rather than padding itself with a report of nothing to report.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     survivors = [e for e in evaluations if e.verdict != KILL][:top_n]
@@ -200,6 +213,13 @@ def write_weekly_report(
             lines.append("- **人群反对声**(persona 压力测试,仅供参考,不改判决)：")
             for obj in e.persona_objections:
                 lines.append(f"  - {obj.get('persona', '')}：{obj.get('objection', '')}")
+        lines.append("")
+
+    if calibrate_report is not None and calibrate_report.get("status") == "ok":
+        lines += ["---", "", "## 因子校准(只读,不自动改权重)", "", calibrate_report["message"], ""]
+        for name, r in sorted(calibrate_report["correlations"].items(), key=lambda kv: -abs(kv[1])):
+            sign = "+" if r >= 0 else ""
+            lines.append(f"- {name}: {sign}{r:.4f}")
         lines.append("")
 
     path.write_text("\n".join(lines), encoding="utf-8")

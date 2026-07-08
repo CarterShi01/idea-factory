@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from idea_factory.contract.models import (
+    EXPERIMENT_FIELDS,
     KILL,
     PURSUE,
     REVIEW,
@@ -67,6 +68,13 @@ def judge_survivors(
         e.killer_objection = d.get("killer_objection", "") or e.killer_objection
         e.riskiest_assumption = d.get("riskiest_assumption", "") or e.riskiest_assumption
         e.cheap_experiment = d.get("cheap_experiment", "") or e.cheap_experiment
+        exp = d.get("experiment")
+        if isinstance(exp, dict):
+            merged = dict(e.experiment)  # start from gate.py's rule default
+            for f in EXPERIMENT_FIELDS:
+                if exp.get(f) not in (None, ""):
+                    merged[f] = exp[f]
+            e.experiment = merged
         e.judge_rebuttal = d.get("respond_to_critique", "") or e.judge_rebuttal
         conf = d.get("confidence", "")
         if conf in ("high", "medium", "low"):

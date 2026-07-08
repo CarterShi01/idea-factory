@@ -17,6 +17,16 @@ follow-up per CLAUDE.md's "no real external API calls without approval" hard
 rule -- this module ships the interface + gate + fixtures now, the live
 fetcher later.
 
+agent-service-plan.md M-C2 (2026-07-08): the *mechanism* is decided --
+``idea_factory.stages.recall.channels.vps_browser.fetch_via_browser`` (挂已
+登录 Chrome), CC-handoff was rejected. What's still genuinely open, not just
+missing targets: that helper returns recall-signal-shaped records (title/url/
+category), while an ``Evidence`` needs ``keywords``(for the same per-candidate
+match this module already does)/``source_date``/``numbers`` -- fields that
+depend on the real target pages' structure, which the founder hasn't supplied
+yet. Wiring this without that is a guess, not a fill-in-the-body task, so it's
+intentionally left as a stub rather than a shape-mismatched fake wire.
+
 Evidence with a ``source_date`` older than 24 months is fetched but marked
 ``valid=False`` (cheat-on-money's staleness rule) and does not count toward the
 gate, but is still shown to the judge so it can say "this evidence is stale".

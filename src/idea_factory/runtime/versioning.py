@@ -37,7 +37,11 @@ _STAGE_ARTIFACTS = (
     "evidence.json", "verdicts.json", "screened.json",
 )
 _REPORT_ARTIFACTS = ("ideas.md", "decision_memos.md", "weekly_report.md")
-_ARTIFACTS = _STAGE_ARTIFACTS + _REPORT_ARTIFACTS
+# bet_memos.json: portfolio's machine-readable out-bound boundary artifact
+# (agent-service-plan.md §2.2) -- snapshotted like the 7 stage artifacts so a
+# historical run's bet memos stay readable, not just the latest overwrite.
+_EXTRA_ARTIFACTS = ("bet_memos.json",)
+_ARTIFACTS = _STAGE_ARTIFACTS + _REPORT_ARTIFACTS + _EXTRA_ARTIFACTS
 _VALID_NAMES = frozenset(_ARTIFACTS)
 _INDEX_NAME = "index.json"
 _VERSIONS_DIR = "versions"

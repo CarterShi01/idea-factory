@@ -69,6 +69,18 @@ def extract_lesson_llm(
     return ""
 
 
+def event_already_recorded(data_dir: str | Path, event_id: str) -> bool:
+    """True iff an outcome with this ``event_id`` is already in outcomes.jsonl.
+
+    Only meaningful for non-empty ``event_id`` -- the founder's own ``idea
+    retro`` entries never set one, so they're never deduped against each other.
+    agent-service-plan.md §2.3: oc's push must be safely retryable.
+    """
+    if not event_id:
+        return False
+    return any(o.get("event_id") == event_id for o in ledger.read_outcomes(data_dir))
+
+
 def record_outcome(
     data_dir: str | Path,
     candidate_id: str,
@@ -81,6 +93,8 @@ def record_outcome(
     lesson: str = "",
     llm: LLMBackend | None = None,
     llm_config: dict | None = None,
+    event_id: str = "",
+    reported_by: str = "founder",
 ) -> Outcome:
     """Record one smoke-test result and append it to ``outcomes.jsonl``.
 
@@ -88,6 +102,13 @@ def record_outcome(
     ``llm`` is provided, :func:`extract_lesson_llm` fills it in from the
     candidate's own verdict context (read from ``verdicts.jsonl``) -- opt-in,
     default path is unchanged.
+
+    ``event_id``/``reported_by`` (agent-service-plan.md §2.3): this function
+    always appends -- it does not dedupe. The ``POST /api/outcome`` inbound
+    boundary checks :func:`event_already_recorded` itself *before* calling
+    this, so a resent event never reaches here twice. Keeping this a dumb,
+    unconditional append preserves its existing behavior/return type for every
+    other caller (CLI ``idea retro``, tests).
     """
     if not lesson and llm is not None:
         verdict = latest_verdict_for(data_dir, candidate_id)
@@ -109,6 +130,8 @@ def record_outcome(
         actual={"metric": metric, "value": actual_value},
         first_revenue=first_revenue,
         lesson=lesson,
+        event_id=event_id,
+        reported_by=reported_by,
     )
     ledger.log_outcome(data_dir, outcome)
     return outcome

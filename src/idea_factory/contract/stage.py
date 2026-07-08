@@ -49,6 +49,11 @@ class StageContext:
     critique: bool = True                 # devil's-advocate pass before the judge
     version: bool = True                  # snapshot processed/ after portfolio
     generate_backend_name: str = "rule"   # "rule" = offline template path
+    # Pre-computed by pipeline.py (composer-only cross-stage glue, same reason
+    # backends are pre-built): retro.calibrate's read-only factor-correlation
+    # report, handed to portfolio's weekly_report tail. None = not computed
+    # (e.g. portfolio isn't in this run's stage range) or calibrate never ran.
+    calibrate_report: dict | None = None
 
 
 @dataclass

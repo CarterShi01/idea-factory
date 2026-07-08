@@ -8,8 +8,14 @@ from idea_factory.contract.models import KILL, PURSUE, REVIEW, Evaluation
 from idea_factory.stages.diligence.apply import apply_evidence
 from idea_factory.stages.diligence.enforce import (
     enforce_evidence_grounding,
+    enforce_experiment_spec,
     enforce_forced_distribution,
 )
+
+_FULL_SPEC = {
+    "metric": "signups", "target": 10, "kill_below": 3,
+    "horizon_days": 7, "budget_band": "0-500元",
+}
 
 
 def _eval(idea_id, verdict, score=70.0) -> Evaluation:
@@ -89,3 +95,34 @@ def test_forced_distribution_noop_when_under_cap():
 
 def test_forced_distribution_empty_batch_noop():
     assert enforce_forced_distribution([]) == []
+
+
+def test_enforce_experiment_spec_demotes_incomplete_pursue():
+    a = _eval("a", PURSUE)
+    a.experiment = dict(_FULL_SPEC)
+    b = _eval("b", PURSUE)
+    b.experiment = {"metric": "signups", "target": 10}  # missing kill_below/horizon_days/budget_band
+    c = _eval("c", PURSUE)  # experiment left empty entirely
+    out = enforce_experiment_spec([a, b, c])
+    by_id = {e.idea_id: e for e in out}
+
+    assert by_id["a"].verdict == PURSUE
+    assert by_id["a"].experiment_demoted is False
+
+    assert by_id["b"].verdict == REVIEW
+    assert by_id["b"].experiment_demoted is True
+    assert any("实验规格" in f for f in by_id["b"].risk_flags)
+
+    assert by_id["c"].verdict == REVIEW
+    assert by_id["c"].experiment_demoted is True
+
+
+def test_enforce_experiment_spec_never_touches_kill_or_already_review():
+    k = _eval("k", KILL)
+    r = _eval("r", REVIEW)
+    out = enforce_experiment_spec([k, r])
+    by_id = {e.idea_id: e for e in out}
+    assert by_id["k"].verdict == KILL
+    assert by_id["r"].verdict == REVIEW
+    assert not by_id["k"].experiment_demoted
+    assert not by_id["r"].experiment_demoted

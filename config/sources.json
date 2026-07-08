@@ -5,15 +5,27 @@
 
   "jobs": {
     "enabled": true,
-    "_note": "招聘信号(钱在流动的地方之一)。离线读 data/raw/fixtures/jobs.jsonl;live 真实招聘网站抓取需创始人批准后再接(见 idea_gen/sources/jobs.py)。"
+    "_note": "招聘信号(钱在流动的地方之一)。离线读 data/raw/fixtures/jobs.jsonl;live 复用 vps_browser 的共享 CDP 机制(agent-service-plan.md M-C1,机制已拍板)——加 targets(如 BOSS直聘)即接,选择器待创始人给站点清单实调,当前留空则优雅返回 []。",
+    "cdp_endpoint": "http://100.111.25.20:9222",
+    "nav_timeout_ms": 30000,
+    "max_items_per_target": 20,
+    "targets": []
   },
   "marketplace": {
     "enabled": true,
-    "_note": "服务成交信号。离线读 data/raw/fixtures/marketplace.jsonl;live 真实市场页抓取需创始人批准后再接。"
+    "_note": "服务成交信号。离线读 data/raw/fixtures/marketplace.jsonl;live 复用 vps_browser 的共享 CDP 机制(agent-service-plan.md M-C1,机制已拍板)——加 targets(如闲鱼成交页)即接,选择器待创始人给站点清单实调,当前留空则优雅返回 []。",
+    "cdp_endpoint": "http://100.111.25.20:9222",
+    "nav_timeout_ms": 30000,
+    "max_items_per_target": 20,
+    "targets": []
   },
   "reviews": {
     "enabled": true,
-    "_note": "竞品差评信号。离线读 data/raw/fixtures/reviews.jsonl;live 真实评论页抓取需创始人批准后再接。"
+    "_note": "竞品差评信号。离线读 data/raw/fixtures/reviews.jsonl;live 复用 vps_browser 的共享 CDP 机制(agent-service-plan.md M-C1,机制已拍板)——加 targets(如竞品评论页)即接,选择器待创始人给站点清单实调,当前留空则优雅返回 []。",
+    "cdp_endpoint": "http://100.111.25.20:9222",
+    "nav_timeout_ms": 30000,
+    "max_items_per_target": 20,
+    "targets": []
   },
 
   "hn_algolia": {

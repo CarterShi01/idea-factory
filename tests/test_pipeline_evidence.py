@@ -81,6 +81,44 @@ def test_portfolio_writes_weekly_report(tmp_path):
     assert "本周候选" in weekly.read_text(encoding="utf-8")
 
 
+def test_weekly_report_calibrate_tail_reflects_real_outcome_sample_size(tmp_path):
+    """pipeline.py wires ctx.calibrate_report (agent-service-plan.md §B3) without
+    breaking the stages/portfolio<->stages/retro isolation rule -- verified
+    end-to-end via the actual rendered file, not by reaching into ctx.
+    """
+    from idea_factory.stages.retro import outcomes as retro_outcomes
+
+    # Vary pain_intensity per idea -- calibrate's Pearson correlation is undefined
+    # (None) when a factor has zero variance across the sample, so identical
+    # factors for all 10 would silently render the message with no factor lines.
+    ideas = [
+        _idea(f"i{n}", pain="p", factors={**_STRONG_FACTORS, "pain_intensity": 0.1 * (n + 1)})
+        for n in range(10)
+    ]
+    _run_expensive(tmp_path, ideas, to_stage="diligence")  # populates verdicts.jsonl (factors logged)
+
+    data_dir = tmp_path / "data"
+    weekly = tmp_path / "processed" / "weekly_report.md"
+
+    # Below min_sample (0 outcomes so far): rerunning portfolio alone must not show the tail.
+    pipeline.run(data_dir=data_dir, output_dir=tmp_path / "processed", today=REF_DATE,
+                 only="portfolio", version=False)
+    assert "因子校准" not in weekly.read_text(encoding="utf-8")
+
+    # Seed >= DEFAULT_MIN_SAMPLE (10) real outcomes matching the logged candidates,
+    # actual value varying too so both series have nonzero variance.
+    for n in range(10):
+        retro_outcomes.record_outcome(
+            data_dir, f"i{n}", "2026-07-12", "signups", float(n + 1), target=10.0,
+        )
+
+    pipeline.run(data_dir=data_dir, output_dir=tmp_path / "processed", today=REF_DATE,
+                 only="portfolio", version=False)
+    text = weekly.read_text(encoding="utf-8")
+    assert "因子校准" in text
+    assert "pain_intensity" in text.split("因子校准")[1]
+
+
 def test_judge_sees_evidence_and_uncited_kill_is_demoted(tmp_path):
     """enrich runs BEFORE judge, so evidence_block is non-empty in the judge's
     prompt; a judge that kills WITHOUT citing any real evidence_id gets bounced
