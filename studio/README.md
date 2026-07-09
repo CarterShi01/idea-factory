@@ -60,6 +60,8 @@ STUDIO_PASSWORD='a-strong-password' python3 studio/server/app.py   # serves dist
 | POST | `/api/run/generate` `{backend,sources,top_n}` | 跑 recall→rank |
 | POST | `/api/run/evaluate` `{backend,floor,top_n}` | 跑 enrich→portfolio |
 | POST | `/api/ledger/label` `{candidate_id,action}` | 星标/杀 = 写 ledger 当标签(操作即标签) |
+| POST | `/api/feedback` `{run_id,idea_id,labels[],note}` | **富反馈**:问题定位标签 + other 自由文本,落 `feedback.jsonl` 并**冻结该 idea 的全链路快照**(自包含 case 数据) |
+| GET  | `/api/feedback?run_id=&idea_id=` | 某 idea 的历史反馈(精简行,不含冻结快照) |
 | POST | `/api/run/whatif-judge` | 非破坏性 judge 单段 what-if(不写盘) |
 | GET  | `/api/ledger/{funnel,verdicts,outcomes,trace}` | ledger 只读视图 |
 | PUT  | `/api/founder-profile` | 编辑 config/founder.json |

@@ -268,3 +268,16 @@ export interface WhatifJudgeResult {
   riskiest_assumption: string;
   judge_reasons: JudgeReason[];
 }
+
+// Compact feedback row (the full record with its frozen lineage stays on disk).
+export interface FeedbackRow {
+  feedback_id: string;
+  ts: string;
+  run_id: string;
+  idea_id: string;
+  labels: string[];
+  note: string;
+  system_verdict: Verdict | null;
+  system_score: number | null;
+  title: string | null;
+}

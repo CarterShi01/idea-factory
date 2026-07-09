@@ -44,6 +44,7 @@ _TRACES_DIRNAME = "traces"
 IMPRESSIONS = "impressions.jsonl"
 VERDICTS = "verdicts.jsonl"
 OUTCOMES = "outcomes.jsonl"
+FEEDBACK = "feedback.jsonl"
 
 # impressions.jsonl event kinds
 ENTERED = "entered"
@@ -296,6 +297,22 @@ def log_outcome(data_dir: str | Path, outcome: Outcome) -> None:
 
 def read_outcomes(data_dir: str | Path) -> list[dict]:
     return read_jsonl(ledger_dir(data_dir) / OUTCOMES)
+
+
+# --- feedback ----------------------------------------------------------------
+# Founder's rich, free-form debug feedback on a single idea, each record
+# carrying a FROZEN snapshot of that idea's full lineage (self-contained, so it
+# survives artifact overwrites). This is deliberately NOT consumed by any
+# optimization step -- it's the raw case-data the founder reads by hand in CC to
+# decide what to change. The write side is on; the read side is a human.
+
+
+def log_feedback(data_dir: str | Path, record: dict) -> None:
+    _append_jsonl(ledger_dir(data_dir) / FEEDBACK, record)
+
+
+def read_feedback(data_dir: str | Path) -> list[dict]:
+    return read_jsonl(ledger_dir(data_dir) / FEEDBACK)
 
 
 # --- traces ------------------------------------------------------------------

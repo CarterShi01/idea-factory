@@ -289,3 +289,12 @@ textarea.txt { resize: vertical; line-height: 1.5; }
 .ask-input { display: flex; gap: 8px; margin-top: 10px; }
 .ask-input .txt { flex: 1; }
 .seg.tiny button { padding: 4px 10px; font-size: 12px; }
+
+/* rich feedback panel (problem-locating labels + free-text note) */
+.reason-chip.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+.fb-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.fb-note { width: 100%; }
+.fb-actions { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
+.fb-history { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 10px; }
+.fb-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; }
+.fb-note-text { font-size: 12px; color: var(--text-dim); white-space: pre-wrap; }

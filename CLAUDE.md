@@ -44,7 +44,7 @@ idea run:  recall → triage → generate → rank → enrich → diligence → 
 | Path | Purpose |
 |---|---|
 | `src/idea_factory/contract/` | 层0 数据契约:`models.py`(Signal/IdeaCandidate/ScoredCandidate/Evidence/Outcome/Evaluation + verdict 常量)· `artifacts.py`(阶段边界工件信封)· `stage.py`(StageContext/StageResult)。改字段=改契约=创始人点头。 |
-| `src/idea_factory/runtime/` | 层1 横切基建:`llm.py`(batch-first 多后端 + backend_for_step)· `ledger.py`(三张 append-only 日志+trace)· `versioning.py` · `config.py`(founder/funnel/sources 统一加载)· `textsim.py` · `state.py`/`trends.py`/`personas.py` |
+| `src/idea_factory/runtime/` | 层1 横切基建:`llm.py`(batch-first 多后端 + backend_for_step)· `ledger.py`(四张 append-only 日志+trace)· `versioning.py` · `config.py`(founder/funnel/sources 统一加载)· `textsim.py` · `state.py`/`trends.py`/`personas.py` |
 | `src/idea_factory/factors/` | 层2 因子库——纯 `candidate → float` 函数,**单一真相源,各段共用** |
 | `src/idea_factory/stages/recall/` | ①捞信号:collect + normalize + channels/(adapter 注册表,加源=加文件+注册一行)+ persona/ |
 | `src/idea_factory/stages/triage/` | ②硬杀(常开):精确/近重去重 + >24月过期红线;use_state 动态模式 |
@@ -60,7 +60,7 @@ idea run:  recall → triage → generate → rank → enrich → diligence → 
 | `config/{founder,funnel,sources}.json` | 画像 / 漏斗参数 / 召回源开关(经 runtime.config 读,env 可覆盖) |
 | `data/raw/` | 样例输入与离线夹具(extend only with synthetic data) |
 | `data/processed/` | 阶段工件 + 报告 + versions/ — never hand-edit; regenerate via `idea run` |
-| `data/ledger/` | impressions/verdicts/outcomes 三张日志 + traces/(常开) |
+| `data/ledger/` | impressions/verdicts/outcomes/feedback 四张日志 + traces/(常开)。feedback=富反馈+冻结血统快照,供人工在 CC 盘 case 优化,不自动回流 |
 | `studio/` | WebUI(server 读工件与 ledger;/api/run 映射段区间) |
 | `docs/research/` | 设计与调研(do not delete);`reference-scan/` 是开源参考调研(00-summary §3 = skip 负面清单,防重爬) |
 | `reference/` | ★开源参考源(只挖不跑):`sources.yaml` 注册表 + `mirrors/`(submodule 钉 commit)+ `miners/<id>.md`(per-source 挖矿沉淀)+ `sync-source.sh`。纪律见其 README;挖矿用 `/mine-reference <id>`;**永不运行镜像代码、永不自动跟随上游、promote 一律 HITL** |

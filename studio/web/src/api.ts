@@ -2,6 +2,7 @@ import type {
   AskBackend,
   AskResult,
   Decision,
+  FeedbackRow,
   FounderProfile,
   FunnelReport,
   Idea,
@@ -94,4 +95,13 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ run_id: runId, idea_id: ideaId, question, backend }),
     }),
+  // Rich founder feedback: problem-locating labels + free-text note, stored with
+  // a frozen lineage snapshot as case-data for manual CC-driven optimization.
+  feedback: (runId: string, ideaId: string, labels: string[], note: string) =>
+    req<{ ok: boolean; feedback_id: string }>("/api/feedback", {
+      method: "POST",
+      body: JSON.stringify({ run_id: runId, idea_id: ideaId, labels, note }),
+    }),
+  feedbackFor: (runId: string, ideaId: string) =>
+    req<FeedbackRow[]>(`/api/feedback?run_id=${enc(runId)}&idea_id=${enc(ideaId)}`),
 };

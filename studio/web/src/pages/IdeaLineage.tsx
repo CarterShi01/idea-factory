@@ -5,6 +5,7 @@ import { FactorBars } from "../components/FactorBar";
 import { VerdictChip } from "../components/VerdictChip";
 import { TracePane } from "../components/TracePane";
 import { AskPanel } from "../components/AskPanel";
+import { FeedbackPanel } from "../components/FeedbackPanel";
 import { STAGE_NUM, stageLabel, killReasonLabel, gateMissingLabel } from "../labels";
 
 /** The T6.2 view: one idea's full cross-stage journey as a vertical timeline,
@@ -160,6 +161,9 @@ export function IdeaLineage({ runId, ideaId }: { runId: string; ideaId: string }
       <div className="grid cols-2" style={{ marginTop: 18 }}>
         <div className="card"><WhatifPanel ideaId={ideaId} /></div>
         <div className="card"><AskPanel runId={runId} ideaId={ideaId} /></div>
+      </div>
+      <div className="card" style={{ marginTop: 18 }}>
+        <FeedbackPanel runId={runId} ideaId={ideaId} />
       </div>
     </>
   );

@@ -71,6 +71,20 @@ export const GATE_MISSING_LABEL: Record<string, string> = {
   reach_path: "触达路径",
 };
 
+// 反馈标签(问题定位型):每个标签直接对应漏斗的一个失败点,方便日后在 CC 里
+// 按标签聚合、定位该修哪段/哪个 prompt。other 由 note 自由文本承载,不在此列。
+export const FEEDBACK_LABELS: { id: string; zh: string; hint: string }[] = [
+  { id: "wrong_kill", zh: "错杀", hint: "系统 KILL 了但我看好 → judge/gate 过严" },
+  { id: "wrong_pursue", zh: "错捧", hint: "系统 PURSUE/REVIEW 但我否 → judge 过松" },
+  { id: "bad_signal", zh: "信号噪音", hint: "信号本身无关/是噪音 → recall 源质量" },
+  { id: "fake_pain", zh: "伪痛点", hint: "痛点臆想/伪需求 → generate / pain 因子" },
+  { id: "weak_evidence", zh: "证据牵强", hint: "证据不对/牵强 → enrich 取证" },
+  { id: "off_profile", zh: "不符画像", hint: "不符我的方向/独占 → founder.json / anti-fit" },
+  { id: "good_catch", zh: "判对了", hint: "系统判对，值得记住(正样本)" },
+];
+export const feedbackLabelZh = (id: string) =>
+  FEEDBACK_LABELS.find((l) => l.id === id)?.zh ?? id;
+
 export const factorLabel = (k: string) => FACTOR_LABEL[k] ?? k;
 export const sourceLabel = (k: string) => SOURCE_LABEL[k] ?? k;
 export const stageLabel = (k: string) => STAGE_LABEL[k] ?? k;

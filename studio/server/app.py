@@ -662,6 +662,73 @@ def do_label(body: dict) -> dict:
     return {"ok": True}
 
 
+# --- rich founder feedback (case data for manual CC-driven optimization) ----
+# Richer than the star/kill label: a set of problem-locating labels + a free
+# text note, each record freezing the idea's FULL lineage snapshot so it stays
+# self-contained for later hand analysis. Deliberately NOT wired into any
+# optimization step -- accumulate now, the founder reads + aggregates in CC and
+# writes the fix by hand. No frontend-triggered automation (by design).
+
+
+def do_feedback(body: dict) -> dict:
+    """Record one rich feedback event on an idea, with a frozen lineage snapshot.
+
+    Body: ``{run_id, idea_id, labels: [str, ...], note: str}``. At least one of
+    ``labels`` / ``note`` must be non-empty. ``labels`` are free strings (the UI
+    offers a fixed vocabulary but the backend never hard-rejects unknown ones --
+    forward-compat as the label set grows). The snapshot is whatever
+    :func:`idea_lineage` reconstructs at write time, so the record survives a
+    later artifact overwrite / version prune.
+    """
+    run_id = (body.get("run_id") or "").strip()
+    idea_id = (body.get("idea_id") or "").strip()
+    if not run_id or not idea_id:
+        raise ValueError("run_id and idea_id are required")
+    labels = body.get("labels") or []
+    if not isinstance(labels, list):
+        raise ValueError("labels must be a list")
+    labels = [str(x).strip() for x in labels if str(x).strip()]
+    note = (body.get("note") or "").strip()
+    if not labels and not note:
+        raise ValueError("at least one label or a note is required")
+
+    lineage = idea_lineage(run_id, idea_id)  # the frozen, self-contained snapshot
+    dil = lineage.get("diligence") or {}
+    record = {
+        "feedback_id": f"{run_id}:{idea_id}:{int(time.time() * 1000)}",
+        "ts": ledger.now_iso(),
+        "run_id": run_id,
+        "idea_id": idea_id,
+        "labels": labels,
+        "note": note,
+        # a few key fields lifted to the top for grep-friendly aggregation in CC;
+        # the full detail lives under `lineage`.
+        "system_verdict": dil.get("verdict"),
+        "system_score": dil.get("eval_score"),
+        "title": (lineage.get("candidate") or {}).get("title"),
+        "lineage": lineage,
+        "lineage_url": f"/#/run/{run_id}/idea/{idea_id}",
+    }
+    ledger.log_feedback(DATA_DIR, record)
+    return {"ok": True, "feedback_id": record["feedback_id"]}
+
+
+def feedback_for(run_id: str | None, idea_id: str | None) -> list[dict]:
+    """Recent feedback, optionally filtered to one idea. Returns compact rows
+    (no frozen lineage) so the UI list stays light; the full record is on disk.
+    """
+    rows = ledger.read_feedback(DATA_DIR)
+    if idea_id:
+        rows = [r for r in rows if r.get("idea_id") == idea_id]
+    if run_id:
+        rows = [r for r in rows if r.get("run_id") == run_id]
+    return [
+        {k: r.get(k) for k in ("feedback_id", "ts", "run_id", "idea_id", "labels",
+                               "note", "system_verdict", "system_score", "title")}
+        for r in rows
+    ]
+
+
 # Backends sensible for an interactive "try it now" UI call. "cc" is excluded on
 # purpose: CC-handoff writes a job pack and pauses for a human to run Claude Code
 # separately, which defeats the point of an instant what-if rerun.
@@ -890,6 +957,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(do_inbox(body))
             if path == "/api/ledger/label":
                 return self._json(do_label(body))
+            if path == "/api/feedback":
+                return self._json(do_feedback(body))
             if path == "/api/run/whatif-judge":
                 return self._json(do_whatif_judge(body))
             if path == "/api/run/stage":
@@ -971,6 +1040,11 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(ledger_verdicts())
             if path == "/api/ledger/outcomes":
                 return self._json(ledger_outcomes())
+            if path == "/api/feedback":
+                return self._json(feedback_for(
+                    (query.get("run_id") or [None])[0],
+                    (query.get("idea_id") or [None])[0],
+                ))
             if path == "/api/ledger/trace":
                 run_id = (query.get("run_id") or [""])[0]
                 stage = (query.get("stage") or [""])[0]
