@@ -17,15 +17,30 @@ follow-up per CLAUDE.md's "no real external API calls without approval" hard
 rule -- this module ships the interface + gate + fixtures now, the live
 fetcher later.
 
-agent-service-plan.md M-C2 (2026-07-08): the *mechanism* is decided --
-``idea_factory.stages.recall.channels.vps_browser.fetch_via_browser`` (挂已
-登录 Chrome), CC-handoff was rejected. What's still genuinely open, not just
-missing targets: that helper returns recall-signal-shaped records (title/url/
-category), while an ``Evidence`` needs ``keywords``(for the same per-candidate
-match this module already does)/``source_date``/``numbers`` -- fields that
-depend on the real target pages' structure, which the founder hasn't supplied
-yet. Wiring this without that is a guess, not a fill-in-the-body task, so it's
-intentionally left as a stub rather than a shape-mismatched fake wire.
+agent-service-plan.md M-C2 (2026-07-08, re-evaluated): live is deliberately a
+no-op, and the re-evaluation found the blocker is architectural, not a missing
+site list. Two reasons, site-list being the smaller:
+
+1. **Per-candidate dynamic query, not fixed targets.** recall's
+   ``vps_browser.fetch_via_browser`` visits a *fixed* configured ``targets``
+   list (search a site for founder-chosen pain themes). enrich instead needs,
+   *for each surviving candidate*, to find pricing/hiring/deal pages relevant
+   to *that* candidate -- a query constructed at run time. That's a different
+   mechanism from "visit these N URLs"; the recall helper can't be reused as-is.
+2. **Structured extraction is C3, and the gate depends on it.** The gate keys
+   on ``numbers`` (a competitor price) and ``source_date`` (staleness). A
+   scrape of a search-results page yields titles, not per-item prices/dates --
+   turning raw page text into ``{numbers, source_date, summary}`` is exactly
+   the ``evidence_structuring`` LLM step (C3). So C2's live body *is* mostly
+   C3; wiring C2 without it can only produce shape-incomplete Evidence the gate
+   rejects anyway -- pure waste. C2 and C3 are one task, not two.
+
+Open design fork for the founder (see plan §5-①): does enrich re-fetch pages
+per-candidate, or *reuse the raw pages recall already scraped* (the jobs/
+marketplace/reviews live signals already flow in as candidates)? The answer
+decides whether enrich needs its own query mechanism at all. Until that's
+decided + the site list exists, live stays a stub rather than a shape-mismatched
+fake wire.
 
 Evidence with a ``source_date`` older than 24 months is fetched but marked
 ``valid=False`` (cheat-on-money's staleness rule) and does not count toward the

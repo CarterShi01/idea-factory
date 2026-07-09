@@ -238,18 +238,26 @@ Chrome + 加 targets),不走 CC-handoff;②LLM 默认后端一律 **腾讯 route
   **不新写爬虫**。改:三个 channel 的 live 分支 + `config/sources.json` targets。
   验收:`idea run --live --only recall` 产出真实 money_trace 信号;离线默认
   路径字节不变。待给:站点清单(§5-①)。
-- **C2 enrich 三 fetcher live**:**执行时收窄了范围,记录在此**——机制决策
-  (vps_browser,CC-handoff 已否决)已写进 `enrich/base.py` docstring,但没有
-  真接线。原因:C1 的 `fetch_via_browser` 返回的是**信号形状**(title/url/
-  category),而 `Evidence` 需要 **keywords(供本模块既有的按候选关键词匹配复用)
-  /source_date/numbers**——这些字段依赖真实目标页的结构,没给站点清单之前接线
-  是猜,不是"填函数体"。C1(recall 三源)不受影响,因为它们本就是信号形状,
-  直接复用 `fetch_via_browser` 零改造(已验证:`idea run --live --only recall`
-  跑通,hn_algolia 真实拉回 20 条,jobs/marketplace/reviews 空 targets 优雅返回
-  `[]`,无异常)。**站点清单给到后**,这里要额外定一件事:每个 target 配的
-  `keywords` 从哪来(config 里手写,还是从页面内容推断)。
-- **C3 evidence_structuring LLM 步**:live 原文 → 结构化 Evidence(依赖 C2),
-  走腾讯 router。新 `config/llm/evidence.json` + dify 镜像。
+- **C2+C3 enrich live(重新评估后合并为一票)**:**2026-07-08 重新评估,结论变了**
+  ——原来把 C2("接三个 fetcher 到浏览器机制")和 C3("LLM 结构化")拆成两票、
+  说 C2"缺站点清单",是判断偏浅。重看 enrich 侧证据模型后发现两个真正的拦路石,
+  站点清单是其中较小的一个:
+  1. **per-candidate 动态检索,不是固定 targets**:recall 的
+     `fetch_via_browser` 访问的是**固定**配置的 `targets`(为创始人选定的痛点主题
+     搜某站);enrich 要的是**对每条幸存候选**去找与该候选相关的定价/招聘/成交页
+     ——运行时按候选构造查询。这是和"访问这 N 个 URL"根本不同的机制,recall 的
+     helper 不能原样复用。
+  2. **结构化提取就是 C3,而证据门依赖它**:证据门 keys on `numbers`(竞品价格)
+     与 `source_date`(过期红线);搜索结果页抓回来的是标题,不是逐条的价格/日期。
+     把原文变成 `{numbers, source_date, summary}` 正是 `evidence_structuring`
+     LLM 步(C3)。所以 **C2 的 live 函数体本身就大半是 C3**;没有 C3 只接 C2 只
+     能产出证据门必然拒收的残缺 Evidence,纯浪费。**C2、C3 是一件事,不是两票。**
+  - **给创始人的设计岔口(§5-①新增)**:enrich 到底是**per-candidate 重新抓页**,
+    还是**复用 recall 已经抓过的原始页**(jobs/marketplace/reviews 的 live 信号
+    本就作为候选流进来了)?这个答案决定 enrich 要不要自己的检索机制。**这不是
+    我能替你拍的**——影响架构走向,得你定。定了 + 站点清单到位,才谈得上接线。
+  - C1(recall 三源)不受影响:它们本就是信号形状,直接复用 `fetch_via_browser`
+    零改造(已验证跑通)。
 - **C4 vps_browser 常态化**:socat 桥固化(devops)、现网选择器实调、
   失败告警进 ledger。批量周跑的可靠性由此票兜底。
 - **C5 LLM 默认切腾讯**:**执行时改了口径,记录在此**——没有去改 `idea run`
@@ -308,8 +316,9 @@ Chrome + 加 targets),不走 CC-handoff;②LLM 默认后端一律 **腾讯 route
 - **最小可用闭环 = M-A + M-B**:oc 每周拿到结构化下注说明书、outcome 能回流。
   即使信号还是 fixture,边界契约先跑起来,oc 侧 workflow 可同步施工。纯离线,
   可立即开工。
-- **价值拐点 = M-C**:信号变真,每周 top idea 才有真产出。拍板已定
-  (vps_browser + 腾讯),每票即"填函数体",只等站点清单(§5-①)。
+- **价值拐点 = M-C**:信号变真,每周 top idea 才有真产出。recall 侧(C1)拍板已定
+  且已接通(只等站点清单填 targets);enrich 侧(C2+C3)重新评估后发现不是"填函数
+  体",还卡一个设计岔口(§5-①),需你先定方向。
 - **M-D / M-E 推迟**:交互式调用近期不做(§0.1)。约束:M-A/M-B/M-C 的产物必须
   让 M-D 直接复用——bet_memos.json 是机读工件、outcome 是 API 端点、
   `pipeline.run` 已支持 `--from enrich`(未来 validate 的入口)与 sources 覆盖
@@ -317,9 +326,16 @@ Chrome + 加 targets),不走 CC-handoff;②LLM 默认后端一律 **腾讯 route
 
 ## §5 拍板状态(2026-07-08 已定)
 
-1. **live 接线** ✅ 定:走 **vps_browser 机制**(不走 CC-handoff)。**唯一待给**:
-   目标站点清单(BOSS直聘/闲鱼/竞品定价页/评论页——合规创始人判断),逐个
-   给 URL + DOM 选择器即接一个。
+1. **live 接线** ✅ 机制定(走 vps_browser,不走 CC-handoff),但拆成两半:
+   - **recall 三源(C1)** ✅ 已接通,**唯一待给**:目标站点清单(BOSS直聘/闲鱼/
+     竞品定价页/评论页,name/category/url/item_selector/title_selector,合规你判断),
+     填进 `config/sources.json` 对应段 `targets` 即通,不改代码。
+   - **enrich 证据(C2+C3)** ⚠️ **需你先拍一个设计岔口**(2026-07-08 重新评估新增):
+     enrich 取证到底是 **(a) per-candidate 重新抓页**(对每条候选构造查询、抓真实
+     定价/招聘/成交页、LLM 结构化成 Evidence),还是 **(b) 复用 recall 已抓的原始
+     页**(jobs/marketplace/reviews 的 live 信号本就流进候选,直接当证据用,省一次
+     抓取)?(a) 证据更精准但要建 per-candidate 检索 + C3 LLM 结构化;(b) 便宜但
+     证据与候选的相关性弱一档。这个不是我能替你拍的,影响架构走向。
 2. **LLM 默认档** ✅ 定:默认全切 **腾讯 router**(tc-code/tc-think);
    `prices.json` 已按 1亿token=100元 填好(commit ea3a7a8),无待办。
 3. **部署形态 / 交互式接入** ✅ 定:**先不做**,近期只跑每周 top idea;架构保持
@@ -342,8 +358,7 @@ M-A + M-B + M-C 的可完成部分。逐票状态:
 | B3 calibrate 摘要 | ✅ 完成 | **执行时发现 §3 原方案会违反分层铁律**(portfolio 直接 import retro.calibrate = 兄弟段互 import,`test_stage_isolation.py` 当场标红)——改为 `pipeline.py`(唯一允许跨段的组合层)计算 `calibrate_report` 纯 dict,经 `StageContext` 注入 portfolio,仿照 `ctx.backends` 的既有先例。portfolio 自身仍零 import retro |
 | C5 LLM 默认切腾讯 | ✅ 完成(范围收窄) | 见上方 C5 票内的记录:未改 `idea run` 裸默认,新增 `scripts/weekly-run.sh` 作为显式预设 |
 | C1 三源 live 接线 | ✅ 完成 | jobs/marketplace/reviews 复用 `vps_browser.fetch_via_browser`;`config/sources.json` 三源加 `cdp_endpoint`/`targets:[]`;端到端验证(`--live --only recall`)真实拉回 hn 信号、空 targets 源优雅退化,无异常 |
-| C2 enrich fetcher live | ⏸️ 机制已定,接线推迟 | 见上方 C2 票内的记录:形状不匹配(信号 vs 证据),没有站点清单前接线是猜测,已在代码里留清晰的后续说明而非假接线 |
-| C3 evidence_structuring | ⏸️ 未做 | 依赖 C2 |
+| C2+C3 enrich live | ⏸️ **重新评估:合并为一票 + 卡设计岔口** | 原判"缺站点清单"偏浅。重看后两个真拦路石(站点清单是较小那个):①enrich 要 per-candidate 动态检索,不同于 recall 的固定 targets,helper 不能原样复用;②结构化提取(numbers/source_date)就是 C3,证据门依赖它——C2 的 live 函数体本身大半是 C3,两者是一件事。**新增设计岔口交创始人**(§5-①):enrich per-candidate 重抓页 vs 复用 recall 已抓页。已把这个结论写进 `enrich/base.py` docstring |
 | C4 vps_browser 常态化 | ⏸️ 未做 | 需要 devops 权限(socat 桥)+ 真实现网调选择器,超出本次会话可验证范围 |
 | D/E | 按 §0.1 推迟 | 未动 |
 

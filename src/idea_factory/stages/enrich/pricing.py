@@ -1,8 +1,9 @@
 """⑤enrich fetcher:竞品定价页(有名字有价格的方案)。
 
-live 版(抓真实定价页)机制已拍板(vps_browser 挂已登录 Chrome,CC-handoff 已否决,
-见 base.py 模块 docstring "M-C2"),但 evidence 的结构化提取(keywords/source_date/
-numbers)仍需站点清单 + 真实页面结构才能不猜测地接线,故仍是 stub。
+live 仍是桩。重新评估(2026-07-08)后的结论:C2 不是"缺站点清单"的填空题——
+它需要 per-candidate 动态检索(不同于 recall 的固定 targets)+ C3 的 LLM 结构化
+(证据门 keys on numbers/source_date,搜索结果页给不了),两者其实是一件事。
+详见 base.py 模块 docstring "M-C2" 与 agent-service-plan.md §5-①的设计岔口。
 """
 
 from __future__ import annotations
