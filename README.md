@@ -6,6 +6,10 @@ into **one evidence-backed, 48h-testable opportunity per week**. The end metric
 is time-to-first-revenue.
 
 The blueprint lives in [`docs/design/pipeline-v2-plan.md`](docs/design/pipeline-v2-plan.md);
+a readable end-to-end map of every stage's prompt + logic is in
+[`docs/design/architecture-flow.md`](docs/design/architecture-flow.md); the
+agent-service direction (idea-factory as oc's "投研部") is in
+[`docs/design/agent-service-plan.md`](docs/design/agent-service-plan.md);
 background research in [`docs/research/`](docs/research/).
 
 > **Offline by default.** Pure Python, standard library only, no network calls
